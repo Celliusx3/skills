@@ -7,18 +7,21 @@ Usage (called by `run_skill_script`):
 The single positional arg is the artifact_id (UUID) of a PDF previously
 uploaded to the current run's artifact bucket. The script:
 
-  1. GETs `${BACKEND_URL}/api/v1/agent-runs/${RUN_ID}/artifacts/<id>` to
-     stream the PDF bytes back.
-  2. Opens it with `pdfplumber` and concatenates `page.extract_text()`
-     across pages, joined by a `--- page N ---` sentinel.
+  1. GETs `${BACKEND_URL}/api/v1/internal/artifacts/<id>` with the
+     per-run `X-Artifact-Token` header. The backend 307s to a presigned
+     MinIO URL and httpx follows it transparently.
+  2. Opens the PDF bytes with `pdfplumber` and concatenates
+     `page.extract_text()` across pages, joined by a `--- page N ---`
+     sentinel.
   3. Detects scanned PDFs (every page extracts to whitespace) and exits
      non-zero with the canonical "chain a vision LLM" hint.
   4. Prints a JSON envelope to stdout. The LLM's tool result will
      contain that JSON.
 
 Required env (set by the orchestrator at sandbox spawn time):
-  RUN_ID      — the agent_run.id this artifact belongs to
-  BACKEND_URL — compose-internal URL (e.g. http://backend:4896)
+  BACKEND_URL            \u2014 compose-internal URL (e.g. http://backend:4896)
+  ARTIFACT_UPLOAD_TOKEN  \u2014 per-run token; the backend's internal artifact
+                           endpoints accept it via `X-Artifact-Token`
 
 Required pip deps (declared via the skill source's setup_command):
   pdfplumber, httpx
@@ -43,13 +46,14 @@ _SCANNED_HINT = (
 )
 
 
-def _fetch_pdf(*, backend_url: str, run_id: str, artifact_id: str) -> bytes:
-    url = (
-        f"{backend_url.rstrip('/')}/api/v1/agent-runs/{run_id}"
-        f"/artifacts/{artifact_id}"
-    )
-    with httpx.Client(timeout=60.0) as client:
-        response = client.get(url)
+def _fetch_pdf(*, backend_url: str, token: str, artifact_id: str) -> bytes:
+    url = f"{backend_url.rstrip('/')}/api/v1/internal/artifacts/{artifact_id}"
+    headers = {"X-Artifact-Token": token}
+    # follow_redirects=True so the 307 to the presigned MinIO URL is
+    # followed transparently. The token is only sent to the backend
+    # (httpx strips auth headers on cross-origin redirects by default).
+    with httpx.Client(timeout=60.0, follow_redirects=True) as client:
+        response = client.get(url, headers=headers)
     if response.status_code != 200:
         raise RuntimeError(
             f"artifact fetch failed: HTTP {response.status_code}: "
@@ -85,8 +89,8 @@ def main() -> int:
         return 2
 
     try:
-        run_id = os.environ["RUN_ID"]
         backend_url = os.environ["BACKEND_URL"]
+        token = os.environ["ARTIFACT_UPLOAD_TOKEN"]
     except KeyError as exc:
         print(
             json.dumps({"error": f"missing required env var {exc.args[0]!r}"}),
@@ -97,7 +101,7 @@ def main() -> int:
     try:
         pdf_bytes = _fetch_pdf(
             backend_url=backend_url,
-            run_id=run_id,
+            token=token,
             artifact_id=artifact_id,
         )
     except Exception as exc:

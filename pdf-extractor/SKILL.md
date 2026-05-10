@@ -18,8 +18,10 @@ run_skill_script(
 `<artifact_id>` is the UUID returned by an earlier upload (e.g. from
 `pdf-renderer` or any node that POSTed to `/api/v1/internal/artifacts`).
 The script fetches the PDF bytes from
-`${BACKEND_URL}/api/v1/agent-runs/${RUN_ID}/artifacts/<artifact_id>`,
-parses the text layer with `pdfplumber`, and prints JSON.
+`${BACKEND_URL}/api/v1/internal/artifacts/<artifact_id>`, sending the
+per-run `${ARTIFACT_UPLOAD_TOKEN}` as `X-Artifact-Token`. The backend
+307s to a presigned MinIO URL; httpx follows it transparently. The
+script then parses the text layer with `pdfplumber` and prints JSON.
 
 ## Output shape
 

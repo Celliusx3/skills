@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Parse raw Sheets rows into typed bookkeeping payloads.
 
-Supports three kinds: Chart of Accounts, flat ledger, manual journals.
-The kind is selected via the `kind` field in the input.
+Supports four kinds: Chart of Accounts, flat ledger, manual journals,
+fixed asset register. The kind is selected via the `kind` field.
 
 Input:
     {
-      "kind": "coa" | "flat_ledger" | "manual_journals",
+      "kind": "coa" | "flat_ledger" | "manual_journals" | "fixed_asset_register",
       "rows": [["header1", "header2", ...], ["row1col1", ...], ...]
     }
 
@@ -14,10 +14,12 @@ Output (varies by kind):
     {"coa": {"entries": [...]}}
     {"flat_ledger": [...]}
     {"manual_journals": [...]}
+    {"register": {"assets": [...]}}
 
-Malformed rows in `flat_ledger` / `manual_journals` are skipped (matches
-the original `SheetsParser` behaviour: partial data shouldn't block a
-period close). `coa` raises `SheetsParseError` on any malformed row.
+Malformed rows in `flat_ledger`, `manual_journals`, and
+`fixed_asset_register` are skipped (matches the original `SheetsParser`
+behaviour: partial data shouldn't block a period close). `coa` raises
+`SheetsParseError` on any malformed row.
 """
 
 from __future__ import annotations
@@ -40,8 +42,11 @@ from _common.models import (  # noqa: E402
     ChartOfAccounts,
     ChartOfAccountsEntry,
     Classification,
+    DepreciationMethod,
     Direction,
     DocumentType,
+    FixedAsset,
+    FixedAssetRegister,
     FlatLedgerRow,
     JournalSource,
     ManualJournalRow,
@@ -267,10 +272,84 @@ def parse_manual_journals(rows: list[list[str]]) -> tuple[ManualJournalRow, ...]
     return tuple(out)
 
 
+def parse_fixed_asset_register(rows: list[list[str]]) -> FixedAssetRegister:
+    """Parse a Fixed Asset Register SHEETS_READ payload into typed assets.
+
+    Header row exposes columns (case-insensitive): asset_id, asset_name,
+    cost, residual_value (optional), useful_life_months, method (optional,
+    defaults straight_line), acquisition_date, asset_account_code,
+    accumulated_depreciation_account_code, depreciation_expense_account_code.
+    Rows missing any required field are skipped.
+    """
+    if not rows:
+        return FixedAssetRegister(assets=())
+    header = [c.strip().lower() for c in rows[0]]
+    required = (
+        "asset_id", "asset_name", "cost", "useful_life_months",
+        "acquisition_date", "asset_account_code",
+        "accumulated_depreciation_account_code",
+        "depreciation_expense_account_code",
+    )
+    indices: dict[str, int] = {}
+    for col in required:
+        if col not in header:
+            raise SheetsParseError(
+                f"Fixed Asset Register missing column {col!r}; got {rows[0]}",
+            )
+        indices[col] = header.index(col)
+    residual_idx = header.index("residual_value") if "residual_value" in header else None
+    method_idx = header.index("method") if "method" in header else None
+
+    assets: list[FixedAsset] = []
+    for row in rows[1:]:
+        if not any(c.strip() for c in row):
+            continue
+        try:
+            asset_id = row[indices["asset_id"]].strip()
+            asset_name = row[indices["asset_name"]].strip()
+            if not asset_id or not asset_name:
+                continue
+            cost = Decimal(row[indices["cost"]].strip())
+            residual = Decimal(
+                row[residual_idx].strip() or "0",
+            ) if residual_idx is not None and len(row) > residual_idx else Decimal("0")
+            useful_life = int(row[indices["useful_life_months"]].strip())
+            method_raw = (
+                row[method_idx].strip().lower()
+                if method_idx is not None and len(row) > method_idx else "straight_line"
+            ) or "straight_line"
+            method = DepreciationMethod(method_raw)
+            acquisition = _parse_iso_date(row[indices["acquisition_date"]])
+            asset_acct = row[indices["asset_account_code"]].strip()
+            accum_acct = row[indices["accumulated_depreciation_account_code"]].strip()
+            expense_acct = row[indices["depreciation_expense_account_code"]].strip()
+            if not asset_acct or not accum_acct or not expense_acct:
+                continue
+        except (IndexError, ValueError, ArithmeticError, InvalidOperation):
+            continue
+        assets.append(
+            FixedAsset(
+                asset_id=asset_id,
+                asset_name=asset_name,
+                cost=cost,
+                residual_value=residual,
+                useful_life_months=useful_life,
+                method=method,
+                acquisition_date=acquisition,
+                asset_account_code=asset_acct,
+                accumulated_depreciation_account_code=accum_acct,
+                depreciation_expense_account_code=expense_acct,
+            ),
+        )
+    return FixedAssetRegister(assets=tuple(assets))
+
+
 def main(payload: dict[str, Any]) -> dict[str, Any]:
     kind = payload.get("kind")
     if not isinstance(kind, str):
-        raise ValueError("kind is required (coa | flat_ledger | manual_journals)")
+        raise ValueError(
+            "kind is required (coa | flat_ledger | manual_journals | fixed_asset_register)",
+        )
     rows = _normalize_rows(payload.get("rows", []))
     if kind == "coa":
         return {"coa": parse_coa(rows).to_json()}
@@ -278,7 +357,12 @@ def main(payload: dict[str, Any]) -> dict[str, Any]:
         return {"flat_ledger": [r.to_json() for r in parse_flat_ledger(rows)]}
     if kind == "manual_journals":
         return {"manual_journals": [r.to_json() for r in parse_manual_journals(rows)]}
-    raise ValueError(f"unknown kind {kind!r} (expected coa | flat_ledger | manual_journals)")
+    if kind == "fixed_asset_register":
+        return {"register": parse_fixed_asset_register(rows).to_json()}
+    raise ValueError(
+        f"unknown kind {kind!r} "
+        "(expected coa | flat_ledger | manual_journals | fixed_asset_register)",
+    )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,48 @@
+[
+  {
+    "skills": ["comic-translator"],
+    "query": "Translate this comic into English with the comic-translator skill.",
+    "files": [
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P01.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P02.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P03.jpg"
+    ],
+    "files_as": "one .zip of the four pages, in this order",
+    "expected_behavior": [
+      "Runs detect and render from the skill's folder with `uv run scripts/run.py`, without reading or copying the scripts",
+      "Asks before installing uv when it is missing, and installs it only after a yes",
+      "Translates every speech bubble: '...y el toque final.' becomes '...and the final touch.' or close",
+      "Leaves the sound effects drawn on the art (SHH SHH, PLOP) as they are, by deleting their entries",
+      "Keeps every box as detect wrote it unless fixing it, and render reports no warnings",
+      "Letters the title page's 'Pepper and Carrot / Episode 1: …' once, whole, with no word cut by another box",
+      "Hands over a zip of the four translated pages named pepper-carrot-ep01-es-english.zip next to the input"
+    ]
+  },
+  {
+    "skills": ["comic-translator"],
+    "query": "Can you translate this page to English?",
+    "files": [
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P02.jpg"
+    ],
+    "files_as": "the single page image",
+    "expected_behavior": [
+      "Uses the comic-translator skill for a single image, not only for archives",
+      "Keeps the original's case: '¡NO! Ni se te ocurra.' (only '¡NO!' in capitals) becomes 'NO! Don't even think about it.' or close",
+      "Hands over the translated page, zipped next to the input"
+    ]
+  },
+  {
+    "skills": ["comic-translator"],
+    "query": "Translate this comic to English, then fix anything that still looks wrong.",
+    "files": [
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P01.jpg"
+    ],
+    "files_as": "the single page image",
+    "expected_behavior": [
+      "Looks at the result-boxes sheets after rendering",
+      "Renders again after any edit, and stops once the page is clean",
+      "When a command is still running, waits by sending the identical command, never a changed one"
+    ]
+  }
+]

@@ -13,6 +13,7 @@ Each subfolder is one skill, following the
 
 | Name | Purpose |
 |---|---|
+| [`comic-translator`](./comic-translator/SKILL.md) | Translate comic, manga, manhwa or webtoon pages in place: `scripts/run.py detect` finds the text and makes enlarged, numbered box sheets to read it from; the agent writes each entry's translation into the page's notes; `render` erases the original lettering and letters the translation. Runs with `uv`; fetches two ONNX models (~215 MB) on first use. |
 | [`pdf-renderer`](./pdf-renderer/SKILL.md) | Author Markdown that renders cleanly to PDF via the canvas `MARKDOWN_TO_PDF` node. Provides document templates (memo, brief, report, letter) and Markdown recipes (tables, page breaks, footnotes). The skill does not render the PDF itself — rendering is a separate canvas node. |
 
 ## Installing into the canvas

@@ -148,8 +148,11 @@ yourself: report `blocked`, and name those pages.
 ## Gotchas
 
 - Detect and render take minutes on a long chapter. When your shell says a
-  command is still running, wait for it the way your shell says to; sending
-  it again changed (as with a longer timeout) starts a second copy.
+  command is still running, call it again with exactly the same command: that
+  call waits, and the one that finishes hands back the JSON report. Do not
+  watch it with `sleep`, `ps` or `kill -0`: you never get the report, and
+  running the command again to see it redoes every page. Sending it changed
+  (as with a longer timeout) starts a second copy.
 - A translation keeps the original's case: words in capitals stay in
   capitals (`¡NO! Ni se te ocurra.` is `NO! Don't even think about it.`).
 - A sound inside a bubble is translated (`¡COF, COF!` is `COUGH, COUGH!`). A

@@ -48,6 +48,11 @@ Progress:
      along the top and left whose numbers are page pixels, as the boxes are.
 
    Running it again keeps notes already in the work folder.
+
+   Then count the pages in `<work folder>/pages`. When your task names no
+   role and there are at least 3 pages for each worker your bot can run, you
+   are Prepare: go to [Long chapters](#long-chapters) now, and do not start
+   step 2.
 2. **Read and edit**, one page at a time: the overview for where each box
    sits, then the page's `boxes` sheets to read the text. The number on a box
    is the entry with that `id` in the page's notes. Open a `review` stretch

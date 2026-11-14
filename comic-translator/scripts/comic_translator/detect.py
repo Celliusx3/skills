@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -27,7 +28,11 @@ LEAST_LINE = 16
 GROW = 1.5
 LINE_GAP = 0.8
 LIKE_HEIGHT = 1.6
+ALIGNED = 1.0
+MOSTLY_OVER = 0.67
 INK = 100
+PAPER_NEAR = 12
+SHADE = 8
 
 TextMap = NDArray[np.float32]
 Stretches = NDArray[np.int32]
@@ -113,14 +118,25 @@ def line_boxes(likely: TextMap) -> list[Box]:
 
 def stacked(upper: Box, lower: Box) -> bool:
     """Whether two lines are lines of one block: overlapping each other, as trailing dots do their
-    word; or overlapping across, of like height, and the gap between them small beside the
-    shorter one."""
+    word; or overlapping across, of like height, the gap between them small beside the shorter
+    one, and in one column."""
     across = min(upper.right, lower.right) - max(upper.left, lower.left)
     gap = max(lower.top - upper.bottom, upper.top - lower.bottom)
     short, tall = sorted((upper.bottom - upper.top, lower.bottom - lower.top))
     if across > 0 and gap < 0:
         return True
-    return across > 0 and tall <= LIKE_HEIGHT * short and gap <= LINE_GAP * short
+    close = across > 0 and tall <= LIKE_HEIGHT * short and gap <= LINE_GAP * short
+    return close and one_column(upper, lower, short)
+
+
+def one_column(upper: Box, lower: Box, short: int) -> bool:
+    """Whether two lines read as one column: sharing a left edge, a right edge or a middle, or
+    the narrower mostly over the wider, while a balloon's next lobe steps aside."""
+    middle = abs(upper.left + upper.right - lower.left - lower.right) / 2
+    offset = min(abs(upper.left - lower.left), abs(upper.right - lower.right), middle)
+    across = min(upper.right, lower.right) - max(upper.left, lower.left)
+    narrow = min(upper.right - upper.left, lower.right - lower.left)
+    return offset <= ALIGNED * short or across >= MOSTLY_OVER * narrow
 
 
 def joined(boxes: list[Box]) -> Box:
@@ -177,33 +193,76 @@ def merged(boxes: list[Box]) -> list[Box]:
         result = [box for n, box in enumerate(result) if n not in pair] + [both]
 
 
-def papers(page: Image.Image) -> Stretches:
+@dataclass(frozen=True)
+class Paper:
+    """A page's stretches of paper and ink, numbered, and its colours."""
+
+    stretches: Stretches
+    colours: NDArray[np.uint8]
+
+
+def papers(page: Image.Image) -> Paper:
     """Each pixel's stretch of the page: touching pixels alike in being paper or ink share a
     number, so a bubble's outline parts its paper from the next bubble's."""
     ink = np.asarray(page.convert("L")) < INK
     paper, count = ndimage.label(~ink)
     dark, _ = ndimage.label(ink)
-    return np.where(ink, dark + count, paper).astype(np.int32)
+    stretches = np.where(ink, dark + count, paper).astype(np.int32)
+    return Paper(stretches, np.asarray(page.convert("RGB")))
 
 
-def paper_of(line: Box, stretches: Stretches) -> int:
+def paper_of(line: Box, paper: Paper) -> int:
     """The stretch covering most of `line`, as the bubble or caption it is printed in does."""
-    under = stretches[line.top : line.bottom, line.left : line.right]
+    under = paper.stretches[line.top : line.bottom, line.left : line.right]
     return int(np.bincount(under.ravel()).argmax())
 
 
-def blocks(lines: list[Box], stretches: Stretches) -> list[Box]:
-    """Each group of stacked lines on one paper as one block, overlapping blocks on that paper
-    joined, in reading order; lines in two bubbles never share a block."""
-    on_paper: dict[int, list[Box]] = {}
+def colour_of(line: Box, paper: Paper) -> NDArray[np.int16]:
+    """The commonest colour round `line`, counted in steps of SHADE, as its paper's."""
+    pixels = paper.colours[line.top : line.bottom, line.left : line.right].reshape(-1, 3)
+    shades, counts = np.unique(pixels // SHADE * SHADE, axis=0, return_counts=True)
+    return shades[counts.argmax()].astype(np.int16)
+
+
+def on_sheets(lines: list[Box], paper: Paper) -> dict[int, list[list[Box]]]:
+    """The lines sorted onto the sheets they are printed on, by stretch: one stretch in one
+    colour, so a white bubble touching a pink one is two sheets though no outline parts them."""
+    found: dict[int, list[tuple[NDArray[np.int16], list[Box]]]] = {}
     for line in lines:
-        on_paper.setdefault(paper_of(line, stretches), []).append(line)
+        colour = colour_of(line, paper)
+        kept = found.setdefault(paper_of(line, paper), [])
+        sheet = next((s for near, s in kept if np.abs(near - colour).max() <= PAPER_NEAR), None)
+        if sheet is None:
+            kept.append((colour, [line]))
+        else:
+            sheet.append(line)
+    return {stretch: [sheet for _, sheet in kept] for stretch, kept in found.items()}
+
+
+def blocks(lines: list[Box], paper: Paper) -> list[Box]:
+    """Each group of stacked lines on one sheet of paper as one block, overlapping blocks in one
+    stretch joined, in reading order; lines in two bubbles never share a block."""
     found = [
         block
-        for kept in on_paper.values()
-        for block in merged([joined(group) for group in groups(kept)])
+        for kept in on_sheets(lines, paper).values()
+        for block in merged([joined(group) for sheet in kept for group in groups(sheet)])
     ]
     return sorted(found, key=lambda box: (box.top, box.left))
+
+
+def held_lines(box: Box, lines: list[Box]) -> list[Box]:
+    """The lines whose middle lies in `box`."""
+    return [
+        line
+        for line in lines
+        if box.left <= (line.left + line.right) / 2 <= box.right
+        and box.top <= (line.top + line.bottom) / 2 <= box.bottom
+    ]
+
+
+def letters_held(lines: list[Box]) -> float:
+    """About how many letters `lines` hold, a letter about as wide as its line is high."""
+    return sum((line.right - line.left) / (line.bottom - line.top) for line in lines)
 
 
 def page_blocks(session: Session, page: Image.Image) -> tuple[list[Box], Image.Image]:

@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw
 
 from comic_translator.detect import (
     DetectError,
+    Paper,
     blocks,
     line_boxes,
     page_blocks,
@@ -21,7 +22,9 @@ from comic_translator.detect import (
 from comic_translator.notes import Box
 from comic_translator.tests.fakes import DarkIsText, page_with_lines
 
-ONE_PAPER = np.ones((10100, 1100), dtype=np.int32)
+ONE_PAPER = Paper(
+    np.ones((10100, 1100), dtype=np.int32), np.full((10100, 1100, 3), 255, dtype=np.uint8)
+)
 
 
 def bubbles(outlines: list[tuple[int, int, int, int]], size=(400, 300)) -> Image.Image:
@@ -153,3 +156,38 @@ def test_a_dark_caption_s_lines_share_its_ink_and_stay_one_block() -> None:
     lines = [Box(40, 40, 360, 60), Box(40, 62, 360, 82)]
 
     assert blocks(lines, papers(page)) == [Box(40, 40, 360, 82)]
+
+
+def test_two_lobes_of_one_balloon_stepping_aside_become_two_blocks() -> None:
+    lines = [Box(657, 595, 695, 613), Box(692, 617, 895, 638), Box(684, 633, 899, 653)]
+
+    assert blocks(lines, ONE_PAPER) == [Box(657, 595, 695, 613), Box(684, 617, 899, 653)]
+
+
+@pytest.mark.parametrize(
+    "lines",
+    [
+        [Box(80, 606, 424, 623), Box(108, 624, 481, 641)],
+        [Box(300, 100, 500, 120), Box(340, 125, 460, 145)],
+        [Box(586, 359, 826, 380), Box(640, 391, 760, 411)],
+    ],
+    ids=["hanging indent", "centred", "short line under a long one"],
+)
+def test_one_bubble_s_lines_however_ragged_stay_one_block(lines: list[Box]) -> None:
+    assert len(blocks(lines, ONE_PAPER)) == 1
+
+
+def test_lines_on_white_and_on_pink_paper_touching_become_two_blocks() -> None:
+    page = Image.new("RGB", (400, 300), "white")
+    ImageDraw.Draw(page).rectangle((20, 64, 380, 140), fill=(250, 232, 226))
+    lines = [Box(40, 40, 360, 60), Box(40, 72, 360, 92)]
+
+    assert blocks(lines, papers(page)) == [Box(40, 40, 360, 60), Box(40, 72, 360, 92)]
+
+
+def test_lines_overlapping_on_one_stretch_of_two_colours_stay_one_block() -> None:
+    page = Image.new("RGB", (400, 300), "white")
+    ImageDraw.Draw(page).rectangle((150, 72, 380, 140), fill=(250, 200, 150))
+    lines = [Box(40, 40, 200, 70), Box(150, 60, 360, 100)]
+
+    assert blocks(lines, papers(page)) == [Box(40, 40, 360, 100)]

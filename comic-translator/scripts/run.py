@@ -19,10 +19,18 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TextIO
 
+import numpy as np
 from PIL import Image
 
 from comic_translator.clean import erased
-from comic_translator.detect import DetectError, page_blocks, unpacked
+from comic_translator.detect import (
+    DetectError,
+    held_lines,
+    letters_held,
+    line_boxes,
+    page_blocks,
+    unpacked,
+)
 from comic_translator.letter import lettered
 from comic_translator.models import (
     INPAINTER,
@@ -33,6 +41,7 @@ from comic_translator.models import (
     session_of,
 )
 from comic_translator.notes import (
+    Box,
     Entry,
     NotesError,
     moved,
@@ -83,6 +92,7 @@ UNTRANSLATED = (
 )
 UNDRAWN = "page {found}, which the lettering font cannot draw: write it in words or leave it out"
 JPEG_QUALITY = 90
+FEW_LETTERS = 0.5
 
 
 def work_of(source: Path) -> Path:
@@ -193,6 +203,25 @@ def warnings_of(path: Path, work: Path, entries: list[Entry], size: tuple[int, i
     ]
 
 
+def reads_too_little(entry: Entry, lines: list[Box]) -> bool:
+    """Whether the box holds two lines or more and its original far fewer letters than they do."""
+    held = held_lines(entry.box, lines)
+    return len(held) > 1 and len(entry.original.strip()) < FEW_LETTERS * letters_held(held)
+
+
+def unread(stem: str, entries: list[Entry], likely: Image.Image | None) -> list[str]:
+    """A line for each entry whose original reads only part of the text detect sees in its box."""
+    if likely is None:
+        return []
+    lines = line_boxes(np.asarray(likely, dtype=np.float32) / 255)
+    return [
+        f"{stem} #{entry.id}: its box holds {len(held_lines(entry.box, lines))} lines of text"
+        f' but its original reads only "{entry.original.strip()}"; read the whole box'
+        for entry in entries
+        if reads_too_little(entry, lines)
+    ]
+
+
 def left_alone(path: Path, work: Path, entries: list[Entry], size: tuple[int, int]) -> list[int]:
     """The ids of the text detect found on the page that the notes no longer hold."""
     copy = work / "detected" / f"{path.stem}.json"
@@ -218,7 +247,8 @@ def rendered_page(path: Path, work: Path, inpainter: Inpainter) -> dict[str, obj
         "page": path.stem,
         "translated": output.name,
         "result-boxes": len(sheets(done, entries, work / "result-boxes", path.stem)),
-        "warnings": warnings_of(path, work, entries, page.size),
+        "warnings": warnings_of(path, work, entries, page.size)
+        + unread(path.stem, entries, likely),
         "left as it is": left_alone(path, work, entries, page.size),
     }
 

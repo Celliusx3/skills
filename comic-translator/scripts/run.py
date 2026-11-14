@@ -98,6 +98,10 @@ UNRENDERED = (
     "pages {pages} are not rendered since their notes last changed: render them, and look at"
     " what render gives back"
 )
+UNCHANGED = (
+    "{stem}: every entry's translation is its original; translate them into the language the"
+    " person asked for"
+)
 UNDRAWN = "page {found}, which the lettering font cannot draw: write it in words or leave it out"
 JPEG_QUALITY = 90
 FEW_LETTERS = 0.5
@@ -169,7 +173,7 @@ def translated(
     for entry in entries:
         if entry.translation.strip():
             others = [other.box for other in entries if other is not entry]
-            patch = lettered(done, page, entry.box, entry.translation, others)
+            patch = lettered(done, page, entry.box, entry.translation, others, entry.original)
             done.paste(patch.image, patch.at)
     return done
 
@@ -231,6 +235,14 @@ def unread(stem: str, entries: list[Entry], likely: Image.Image | None) -> list[
     ]
 
 
+def untranslated_page(stem: str, entries: list[Entry]) -> list[str]:
+    """A line when a page of two entries or more has every translation the same as its
+    original, as a page left in the original's language is."""
+    if len(entries) < 2 or any(e.translation.strip() != e.original.strip() for e in entries):
+        return []
+    return [UNCHANGED.format(stem=stem)]
+
+
 def left_alone(path: Path, work: Path, entries: list[Entry], size: tuple[int, int]) -> list[int]:
     """The ids of the text detect found on the page that the notes no longer hold."""
     copy = work / "detected" / f"{path.stem}.json"
@@ -257,7 +269,8 @@ def rendered_page(path: Path, work: Path, inpainter: Inpainter) -> dict[str, obj
         "translated": output.name,
         "result-boxes": len(sheets(done, entries, work / "result-boxes", path.stem)),
         "warnings": warnings_of(path, work, entries, page.size)
-        + unread(path.stem, entries, likely),
+        + unread(path.stem, entries, likely)
+        + untranslated_page(path.stem, entries),
         "left as it is": left_alone(path, work, entries, page.size),
     }
 

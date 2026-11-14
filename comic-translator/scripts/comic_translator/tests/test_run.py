@@ -384,3 +384,41 @@ def test_help_says_how_to_pack() -> None:
 
     assert code == 0
     assert "pack <work folder> <archive>" in text
+
+
+@pytest.mark.parametrize(
+    ("second", "warned"), [("¿Zanahoria?", True), ("Carrot?", False)], ids=["kept", "translated"]
+)
+def test_render_warns_of_a_page_whose_every_translation_is_its_original(
+    detected: dict, second: str, warned: bool
+) -> None:
+    first, other = json.loads(notes_of(detected).read_text())
+    notes_of(detected).write_text(
+        json.dumps(
+            [
+                {**first, "original": "¡Zanahoria!", "translation": "¡Zanahoria!"},
+                {**other, "original": "¿Zanahoria?", "translation": second},
+            ]
+        )
+    )
+
+    code, result = called(["render", detected["work"]])
+
+    assert code == 0
+    expected = (
+        "001: every entry's translation is its original; translate them into the language the"
+        " person asked for"
+    )
+    assert (expected in result["pages"][0]["warnings"]) is warned
+
+
+def test_render_does_not_warn_of_a_page_of_one_entry_kept_as_it_reads(detected: dict) -> None:
+    first, _ = json.loads(notes_of(detected).read_text())
+    notes_of(detected).write_text(
+        json.dumps([{**first, "original": "Grrr", "translation": "Grrr"}])
+    )
+
+    code, result = called(["render", detected["work"]])
+
+    assert code == 0
+    assert result["pages"][0]["warnings"] == []

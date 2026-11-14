@@ -67,13 +67,13 @@
       "Acts as Prepare: runs detect, then stops before reading any page",
       "Writes {} to names.json in the work folder",
       "Reports ready with 'The chapter has 12 pages, so it is translated in 3 parts.'",
-      "Lists three Part task lines to start now, each to translate and render pages 000-003, 004-007 and 008-011, with the work folder's full path",
+      "Lists three Part task lines to start now, each to translate pages 000-003, 004-007 and 008-011 into English and render them, with the work folder's full path",
       "Lists one Combine task line to start only after every part reports ready, that packs the work folder and hands over <input>-english.zip next to the input"
     ]
   },
   {
     "skills": ["comic-translator"],
-    "query": "Part: translate and render pages 000-001 of the chapter in <work folder> with the comic-translator skill.",
+    "query": "Part: translate pages 000-001 of the chapter in <work folder> into English and render them, with the comic-translator skill.",
     "files": [
       "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",
       "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P01.jpg",
@@ -83,6 +83,7 @@
     "files_as": "a work folder made by detect from one .zip of the four pages, holding names.json with {\"Pepper\": \"Pepper\"}",
     "expected_behavior": [
       "Reads and edits the notes of pages 000 and 001 only, and leaves 002 and 003 untouched",
+      "Translates into English, the language its task names, with no translation left the same as its original unless it already reads right",
       "Reads names.json before each page and keeps 'Pepper' as it is",
       "Adds any new name it meets, such as 'Carrot', to names.json without dropping 'Pepper'",
       "Renders pages 000 and 001 only, naming them after the work folder, and looks at their result-boxes sheets",

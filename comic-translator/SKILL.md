@@ -101,7 +101,9 @@ Progress:
       - a box far from where detect found its text, with the box detect
         found: put the box back on its text;
       - a box holding more lines than its `translation` reads: read the whole
-        box again.
+        box again;
+      - a page whose every translation is its original: translate it into
+        the language asked for.
    3. Each page's `left as it is` lists the ids of text detect found whose
       entry was deleted. Find each by its box in `detected/<page>.json` on
       the ruled `review` images. One in a speech bubble or a caption, however
@@ -140,12 +142,13 @@ to 4. Otherwise:
 - Write `{}` to `<work folder>/names.json`.
 - Split the pages into that many runs of pages, in order, as even as they go.
 - Call `ticket_report` with the state `ready` and this summary, every path
-  in full:
+  in full and `<language>` the one the person asked for (English when they
+  don't say), since each part sees only its own line:
 
   ```text
   The chapter has <pages> pages, so it is translated in <parts> parts.
   Start now one worker for each line below, with the line as its whole task:
-  - Part: translate and render pages <first>-<last> of the chapter in <work folder> with the comic-translator skill.
+  - Part: translate pages <first>-<last> of the chapter in <work folder> into <language> and render them, with the comic-translator skill.
   - (one line for each part)
   Only after every one of those reports ready, start one worker with this task:
   - Combine: pack the chapter in <work folder> with the comic-translator skill, and hand over <input's folder>/<input's name>-<language>.zip.
@@ -154,8 +157,8 @@ to 4. Otherwise:
 - Stop there. Those lines are for your bot, which starts each one as its
   own worker, so the person sees every part. Do not read a page yourself.
 
-**Part.** Do step 2, Read and edit, then step 3, Render and check, for the
-pages your task names and no others. Page names are the notes files' names,
+**Part.** Do step 2, Read and edit, into the language your task names, then
+step 3, Render and check, for the pages your task names and no others. Page names are the notes files' names,
 such as `012`. Render only your pages, naming each of them after the work
 folder, and fix your own pages until each is clean: no one renders or checks
 them after you.

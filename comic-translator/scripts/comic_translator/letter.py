@@ -46,12 +46,26 @@ def cap_of(size: int) -> int:
 
 
 @cache
-def size_for(height: int) -> int:
-    """The largest size whose capitals stand no taller than `height`."""
+def x_of(size: int) -> int:
+    """How tall a lowercase letter without an ascender stands above its baseline at `size`."""
+    return -int(font_at(size).getbbox("x", anchor="ls")[1])
+
+
+@cache
+def size_for(height: int, lower: bool = False) -> int:
+    """The largest size whose capitals, or lowercase letters when `lower`, stand no taller than
+    `height`."""
+    measure = x_of if lower else cap_of
     size = SMALLEST
-    while cap_of(size + 1) <= height:
+    while measure(size + 1) <= height:
         size += 1
     return size
+
+
+def mostly_lower(written: str) -> bool:
+    """Whether `written` has more lowercase letters than capitals, so the dense rows of its lines
+    are its lowercase letters' height, not its capitals'."""
+    return sum(c.islower() for c in written) > sum(c.isupper() for c in written)
 
 
 def pitch_of(size: int) -> int:
@@ -237,10 +251,14 @@ def room_around(page: Image.Image, box: Box, taken: list[Box]) -> tuple[Box, Box
     return area, inset(spread(plain, shifted(seed, box.top - area.top, box.left - area.left))), True
 
 
-def tallest(original: Image.Image, box: Box) -> int:
-    """The largest size the original's letters allow; the box's height when they cannot be told."""
+def tallest(original: Image.Image, box: Box, written: str) -> int:
+    """The largest size the original's letters allow, matched on lowercase letters when
+    `written`, the original's text, is mostly lowercase; the box's height when they cannot be
+    told."""
     height = letter_height(np.asarray(original.crop(box.corners())))
-    return size_for(height if height is not None else box.bottom - box.top)
+    if height is None:
+        return size_for(box.bottom - box.top)
+    return size_for(height, mostly_lower(written))
 
 
 def colours(page: Image.Image, box: Box) -> tuple[Colour, Colour]:
@@ -273,13 +291,14 @@ def drawn(done: Image.Image, room: Box, lines: list[str], size: int, paint: Pain
 
 
 def lettered(
-    page: Image.Image, original: Image.Image, box: Box, text: str, taken: list[Box]
+    page: Image.Image, original: Image.Image, box: Box, text: str, taken: list[Box], written: str
 ) -> Patch:
     """The piece of `page` around `box` with `text` lettered in its plain room, no taller than the
-    original's letters; on a busy background, inside the box and edged."""
+    original's letters, `written` being their text; on a busy background, inside the box and
+    edged."""
     area, room, roomy = room_around(page, box, taken)
     done = page.crop(area.corners())
-    size, lines = fitted(text, room, tallest(original, box))
+    size, lines = fitted(text, room, tallest(original, box, written))
     ink, edge = colours(page, box)
     drawn(done, room, lines, size, (ink, None if roomy else edge))
     return Patch(done, (area.left, area.top))

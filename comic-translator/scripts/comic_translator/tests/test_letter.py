@@ -83,7 +83,7 @@ def test_a_busy_box_is_lettered_across_the_whole_box() -> None:
 def test_light_paper_gets_black_letters_and_the_page_is_untouched() -> None:
     page = Image.new("RGB", (300, 200), "silver")
 
-    piece = np.asarray(lettered(page, page, BOX, "HELLO THERE", []).image)
+    piece = np.asarray(lettered(page, page, BOX, "HELLO THERE", [], "HOLA").image)
 
     assert piece.min() == 0
     assert piece.max() == 192
@@ -93,7 +93,7 @@ def test_light_paper_gets_black_letters_and_the_page_is_untouched() -> None:
 def test_dark_paper_gets_white_letters() -> None:
     page = Image.new("RGB", (300, 200), "black")
 
-    piece = np.asarray(lettered(page, page, BOX, "HELLO THERE", []).image)
+    piece = np.asarray(lettered(page, page, BOX, "HELLO THERE", [], "HOLA").image)
 
     assert piece.max() == 255
 
@@ -102,7 +102,7 @@ def test_a_busy_box_is_lettered_inside_it_with_an_edge() -> None:
     noise = np.random.default_rng(0).integers(0, 256, (200, 300, 3), dtype=np.uint8)
     page = Image.fromarray(noise)
 
-    patch = lettered(page, page, BOX, "HELLO", [])
+    patch = lettered(page, page, BOX, "HELLO", [], "HOLA")
 
     assert patch.at == (BOX.left, BOX.top)
     assert patch.image.size == (200, 100)
@@ -120,7 +120,7 @@ def test_a_long_line_in_a_tight_box_spreads_into_its_bubble_at_the_original_lett
 ):
     page, original, box = bubble(16)
 
-    rows = ink_rows(lettered(page, original, box, OFFER, []))
+    rows = ink_rows(lettered(page, original, box, OFFER, [], "HOLA"))
 
     assert rows.min() < box.top and rows.max() > box.bottom
     assert rows.min() > 64 and rows.max() < 236
@@ -129,7 +129,7 @@ def test_a_long_line_in_a_tight_box_spreads_into_its_bubble_at_the_original_lett
 def test_the_lettering_is_never_taller_than_the_original_letters() -> None:
     page, original, box = bubble(12)
 
-    rows = ink_rows(lettered(page, original, box, "HI", []))
+    rows = ink_rows(lettered(page, original, box, "HI", [], "HOLA"))
 
     assert 10 <= rows.max() - rows.min() + 1 <= 12
 
@@ -138,7 +138,7 @@ def test_the_lettering_keeps_out_of_another_entry_s_box() -> None:
     page, original, box = bubble(16)
     neighbour = Box(60, 100, 340, 135)
 
-    patch = lettered(page, original, box, OFFER, [neighbour])
+    patch = lettered(page, original, box, OFFER, [neighbour], "HOLA")
 
     assert ink_rows(patch).min() >= neighbour.bottom
 
@@ -146,7 +146,7 @@ def test_the_lettering_keeps_out_of_another_entry_s_box() -> None:
 def test_the_letters_are_drawn_bold() -> None:
     page = Image.new("RGB", (200, 100), "white")
 
-    inked = dark(lettered(page, page, Box(0, 0, 200, 100), "I", []))
+    inked = dark(lettered(page, page, Box(0, 0, 200, 100), "I", [], "HOLA"))
     rows = inked[inked.any(axis=1)]
 
     assert rows[len(rows) // 2].sum() >= 0.18 * len(rows)
@@ -156,7 +156,15 @@ def test_a_line_as_wide_as_its_room_keeps_its_last_letter_whole() -> None:
     page = Image.new("RGB", (300, 60), "white")
     box = Box(0, 0, 300, 60)
 
-    inked = dark(lettered(page, page, box, "SOMETIMES BANKS HAVE MORE CASH ON HAND", []))
+    inked = dark(lettered(page, page, box, "SOMETIMES BANKS HAVE MORE CASH ON HAND", [], "HOLA"))
     columns = np.where(inked.any(axis=0))[0]
 
     assert columns.min() > 0 and columns.max() < 299
+
+
+def test_lowercase_lettering_is_as_tall_as_a_lowercase_original_s_letters() -> None:
+    page, original, box = bubble(12)
+
+    rows = ink_rows(lettered(page, original, box, "uno no", [], "una mano"))
+
+    assert 10 <= rows.max() - rows.min() + 1 <= 12

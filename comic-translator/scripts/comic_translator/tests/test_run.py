@@ -180,3 +180,39 @@ def test_render_takes_a_page_whose_entries_were_all_deleted(detected: dict) -> N
 
     assert code == 0
     assert result["pages"][0]["page"] == "001"
+
+
+def second_page(detected: dict) -> Path:
+    work = Path(detected["work"])
+    (work / "pages" / "002.png").write_bytes((work / "pages" / "001.png").read_bytes())
+    (work / "notes" / "002.json").write_text(notes_of(detected).read_text())
+    return work
+
+
+def test_render_with_pages_named_redraws_only_those(detected: dict) -> None:
+    work = second_page(detected)
+    translate_every_entry(detected["work"])
+
+    code, result = called(["render", detected["work"], "002"])
+
+    assert code == 0
+    assert [page["page"] for page in result["pages"]] == ["002"]
+    assert (work / "translated" / "002.png").is_file()
+    assert not (work / "translated" / "001.png").exists()
+
+
+def test_render_refuses_a_page_the_work_folder_does_not_hold(detected: dict) -> None:
+    second_page(detected)
+    translate_every_entry(detected["work"])
+
+    code, text = called(["render", detected["work"], "009"])
+
+    assert code == 1
+    assert text == "error: the work folder has no page 009; its pages are 001, 002"
+
+
+def test_help_says_render_can_redo_named_pages() -> None:
+    code, text = called(["--help"])
+
+    assert code == 0
+    assert "render <work folder> [page ...]" in text

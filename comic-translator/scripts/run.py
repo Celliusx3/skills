@@ -43,7 +43,10 @@ from comic_translator.notes import (
 from comic_translator.review import overview, review_images
 from comic_translator.sheets import box_sheets
 
-USAGE = "usage: run.py detect <image or archive> | run.py render <work folder> | run.py --help"
+USAGE = (
+    "usage: run.py detect <image or archive> | run.py render <work folder> [page ...]"
+    " | run.py --help"
+)
 HELP = """usage: uv run scripts/run.py COMMAND ARGUMENT
 
 Translate a comic's text in place, page by page.
@@ -52,8 +55,10 @@ commands:
   detect <image, .zip or .cbz>  find the text on every page and write a work folder beside the
                                 input: notes to edit, and images to read them by; notes already
                                 in the work folder are kept
-  render <work folder>          erase each entry's text and letter its translation, from the
-                                original pages, into the work folder's translated/ pages
+  render <work folder> [page ...]
+                                erase each entry's text and letter its translation, from the
+                                original pages, into the work folder's translated/ pages; name
+                                pages, such as 005, to redo only those
 
 Each prints one JSON object, or one line starting "error:" saying what to fix.
 
@@ -231,8 +236,21 @@ def alone(work: Path) -> Iterator[None]:
         mark.unlink(missing_ok=True)
 
 
-def render(work: Path) -> dict[str, object]:
-    """Every page of the work folder translated from its notes, in page order."""
+def chosen(pages: Sequence[Path], names: Sequence[str]) -> list[Path]:
+    """The pages named, in page order, or every page when none is named."""
+    if not names:
+        return list(pages)
+    held = {p.stem: p for p in pages}
+    unknown = [name for name in names if name not in held]
+    if unknown:
+        raise DetectError(
+            f"the work folder has no page {', '.join(unknown)}; its pages are {', '.join(held)}"
+        )
+    return [held[name] for name in sorted(set(names))]
+
+
+def render(work: Path, names: Sequence[str]) -> dict[str, object]:
+    """The named pages of the work folder, or every page, translated from their notes."""
     pages = sorted(p for p in (work / "pages").iterdir() if p.is_file())
     if not pages:
         raise DetectError(f"{work} holds no pages; run detect first")
@@ -242,9 +260,10 @@ def render(work: Path) -> dict[str, object]:
     missing = untranslated_pages(notes)
     if missing:
         raise DetectError(UNTRANSLATED.format(pages=", ".join(missing)))
+    redo = chosen(pages, names)
     inpainter = Inpainter()
     with alone(work):
-        done = [rendered_page(p, work, inpainter) for p in pages]
+        done = [rendered_page(p, work, inpainter) for p in redo]
     return {"work": str(work), "files": RENDER_FILES, "pages": done}
 
 
@@ -255,11 +274,11 @@ def command(argv: Sequence[str]) -> dict[str, object]:
             if not path.is_file():
                 raise DetectError(f"{source} is not a file")
             return detect(path.resolve(), session_of(TEXT_FINDER, cache_folder()))
-        case ["render", folder]:
+        case ["render", folder, *names]:
             work = Path(folder).expanduser().resolve()
             if not (work / "pages").is_dir():
                 raise DetectError(f"{folder} is not a work folder from detect")
-            return render(work)
+            return render(work, names)
         case _:
             raise DetectError(USAGE)
 

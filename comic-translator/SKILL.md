@@ -90,7 +90,8 @@ Progress:
    `result-boxes/<page>-<n>.jpg` sheets, each box cut from the translated
    page (a `result` stretch for a closer look). Where text is left over, a
    box reached onto the art, or a translation reads badly, edit the notes and
-   render again, until every page is clean. A piece of text still not clean
+   render only those pages again, naming them after the work folder, such as
+   `render "<work folder>" 005 012`, until every page is clean. A piece of text still not clean
    after you changed its entry twice: delete its entry, and say so in your
    answer.
 4. **Hand over**, in two steps:

@@ -121,6 +121,10 @@ to 4. Otherwise:
   - Combine: render the chapter in <work folder> with the comic-translator skill, and hand over <input's folder>/<input's name>-<language>.zip.
   ```
 
+- Stop there. Those lines are for your bot, which starts each one as its
+  own worker, so the person sees every part. Do not read a page, and do not
+  start helpers with `run_subagent` to do the parts yourself.
+
 **Part.** Do step 2, Read and edit, for the pages your task names and no
 others. Page names are the notes files' names, such as `012`.
 

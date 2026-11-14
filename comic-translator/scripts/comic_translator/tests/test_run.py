@@ -250,21 +250,21 @@ def test_render_names_the_text_left_as_it_is(detected: dict) -> None:
 
 
 @pytest.mark.parametrize(
-    ("original", "warned"),
+    ("translation", "warned"),
     [("GLIX.", True), ("THE FIRST LINE AND THEN THE SECOND ONE", False)],
 )
-def test_render_warns_of_a_box_of_several_lines_whose_original_reads_one_word(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, original: str, warned: bool
+def test_render_warns_of_a_box_of_several_lines_whose_translation_reads_one_word(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, translation: str, warned: bool
 ) -> None:
     monkeypatch.setattr(run, "session_of", fake_session)
     page = page_with_lines(tmp_path / "001.png", [(40, 50, 300, 62), (40, 70, 280, 82)])
     code, result = called(["detect", str(page)])
     notes = Path(result["work"]) / "notes" / "001.json"
     [entry] = json.loads(notes.read_text())
-    notes.write_text(json.dumps([{**entry, "original": original, "translation": "hi"}]))
+    notes.write_text(json.dumps([{**entry, "original": "x", "translation": translation}]))
 
     code, result = called(["render", result["work"]])
 
     assert code == 0
-    expected = '001 #1: its box holds 2 lines of text but its original reads only "GLIX."'
+    expected = '001 #1: its box holds 2 lines of text but its translation reads only "GLIX."'
     assert result["pages"][0]["warnings"] == ([f"{expected}; read the whole box"] if warned else [])

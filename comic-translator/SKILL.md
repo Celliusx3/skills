@@ -89,7 +89,7 @@ Progress:
    `♪` or an emoji, and names the entry: write it in words or leave it out.
    Each page's `warnings` name a box now far from where detect found its
    text, with the box detect found: fix those first. They also name a box
-   holding more lines than its `original` reads: read the whole box again. Each page's
+   holding more lines than its `translation` reads: read the whole box again. Each page's
    `left as it is` lists the ids of text detect found whose entry was
    deleted. Find each by its box in `detected/<page>.json` on the ruled
    `review` images: one in a speech bubble or a caption, however short

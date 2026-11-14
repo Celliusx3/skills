@@ -27,8 +27,10 @@ LEAST_LINE = 16
 GROW = 1.5
 LINE_GAP = 0.8
 LIKE_HEIGHT = 1.6
+INK = 100
 
 TextMap = NDArray[np.float32]
+Stretches = NDArray[np.int32]
 
 
 class DetectError(ValueError):
@@ -175,13 +177,37 @@ def merged(boxes: list[Box]) -> list[Box]:
         result = [box for n, box in enumerate(result) if n not in pair] + [both]
 
 
-def blocks(lines: list[Box]) -> list[Box]:
-    """Each group of stacked lines as one block, overlapping blocks joined, in reading order."""
-    grouped = [joined(group) for group in groups(lines)]
-    return sorted(merged(grouped), key=lambda box: (box.top, box.left))
+def papers(page: Image.Image) -> Stretches:
+    """Each pixel's stretch of the page: touching pixels alike in being paper or ink share a
+    number, so a bubble's outline parts its paper from the next bubble's."""
+    ink = np.asarray(page.convert("L")) < INK
+    paper, count = ndimage.label(~ink)
+    dark, _ = ndimage.label(ink)
+    return np.where(ink, dark + count, paper).astype(np.int32)
+
+
+def paper_of(line: Box, stretches: Stretches) -> int:
+    """The stretch covering most of `line`, as the bubble or caption it is printed in does."""
+    under = stretches[line.top : line.bottom, line.left : line.right]
+    return int(np.bincount(under.ravel()).argmax())
+
+
+def blocks(lines: list[Box], stretches: Stretches) -> list[Box]:
+    """Each group of stacked lines on one paper as one block, overlapping blocks on that paper
+    joined, in reading order; lines in two bubbles never share a block."""
+    on_paper: dict[int, list[Box]] = {}
+    for line in lines:
+        on_paper.setdefault(paper_of(line, stretches), []).append(line)
+    found = [
+        block
+        for kept in on_paper.values()
+        for block in merged([joined(group) for group in groups(kept)])
+    ]
+    return sorted(found, key=lambda box: (box.top, box.left))
 
 
 def page_blocks(session: Session, page: Image.Image) -> tuple[list[Box], Image.Image]:
     """The page's blocks of text, and its text map as a grey image to keep beside the notes."""
     likely = text_map(session, page)
-    return blocks(line_boxes(likely)), Image.fromarray((likely.clip(0, 1) * 255).astype(np.uint8))
+    found = blocks(line_boxes(likely), papers(page))
+    return found, Image.fromarray((likely.clip(0, 1) * 255).astype(np.uint8))

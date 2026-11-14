@@ -7,11 +7,30 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
-from comic_translator.detect import DetectError, blocks, line_boxes, page_blocks, text_map, unpacked
+from comic_translator.detect import (
+    DetectError,
+    blocks,
+    line_boxes,
+    page_blocks,
+    papers,
+    text_map,
+    unpacked,
+)
 from comic_translator.notes import Box
 from comic_translator.tests.fakes import DarkIsText, page_with_lines
+
+ONE_PAPER = np.ones((10100, 1100), dtype=np.int32)
+
+
+def bubbles(outlines: list[tuple[int, int, int, int]], size=(400, 300)) -> Image.Image:
+    """A white page with a black outline drawn round each bubble."""
+    page = Image.new("RGB", size, "white")
+    pen = ImageDraw.Draw(page)
+    for outline in outlines:
+        pen.rectangle(outline, outline="black", width=2)
+    return page
 
 
 def test_an_archive_is_unpacked_in_name_order_and_only_its_images(tmp_path: Path) -> None:
@@ -71,19 +90,19 @@ def test_a_sure_line_is_grown_back_over_its_letters_and_specks_are_dropped() -> 
 def test_lines_stacked_close_become_one_block_and_far_ones_stay_apart() -> None:
     lines = [Box(10, 10, 200, 30), Box(20, 35, 180, 55), Box(10, 300, 100, 320)]
 
-    assert blocks(lines) == [Box(10, 10, 200, 55), Box(10, 300, 100, 320)]
+    assert blocks(lines, ONE_PAPER) == [Box(10, 10, 200, 55), Box(10, 300, 100, 320)]
 
 
 def test_trailing_dots_overlapping_their_word_join_it_however_small() -> None:
     lines = [Box(510, 9982, 616, 10055), Box(601, 10024, 640, 10047)]
 
-    assert blocks(lines) == [Box(510, 9982, 640, 10055)]
+    assert blocks(lines, ONE_PAPER) == [Box(510, 9982, 640, 10055)]
 
 
 def test_blocks_left_overlapping_after_grouping_become_one_block() -> None:
     lines = [Box(172, 79, 700, 130), Box(172, 150, 500, 200), Box(618, 135, 1016, 260)]
 
-    assert blocks(lines) == [Box(172, 79, 1016, 260)]
+    assert blocks(lines, ONE_PAPER) == [Box(172, 79, 1016, 260)]
 
 
 def test_a_page_s_blocks_are_its_lines_of_text(tmp_path: Path) -> None:
@@ -104,4 +123,33 @@ def test_a_tall_burst_never_swallows_the_lines_round_it_into_one_block() -> None
     lines = [Box(10, 0, 300, 20), Box(0, 40, 700, 530), Box(10, 560, 300, 580)]
     lines.append(Box(10, 590, 300, 610))
 
-    assert blocks(lines) == [Box(10, 0, 300, 20), Box(0, 40, 700, 530), Box(10, 560, 300, 610)]
+    assert blocks(lines, ONE_PAPER) == [
+        Box(10, 0, 300, 20),
+        Box(0, 40, 700, 530),
+        Box(10, 560, 300, 610),
+    ]
+
+
+def test_lines_close_but_in_two_bubbles_become_two_blocks() -> None:
+    page = bubbles([(20, 20, 380, 63), (20, 66, 380, 120)])
+    lines = [Box(40, 40, 360, 60), Box(40, 72, 360, 92), Box(40, 90, 360, 110)]
+
+    assert blocks(lines, papers(page)) == [Box(40, 40, 360, 60), Box(40, 72, 360, 110)]
+
+
+def test_blocks_of_two_bubbles_overlapping_at_a_corner_stay_apart() -> None:
+    page = bubbles([(20, 20, 200, 120), (204, 20, 390, 120)])
+    lines = [Box(30, 30, 210, 60), Box(30, 62, 190, 90), Box(205, 80, 380, 110)]
+    lines.append(Box(214, 30, 380, 55))
+
+    found = blocks(lines, papers(page))
+
+    assert found == [Box(30, 30, 210, 90), Box(214, 30, 380, 55), Box(205, 80, 380, 110)]
+
+
+def test_a_dark_caption_s_lines_share_its_ink_and_stay_one_block() -> None:
+    page = Image.new("RGB", (400, 300), "white")
+    ImageDraw.Draw(page).rectangle((20, 20, 380, 140), fill="black")
+    lines = [Box(40, 40, 360, 60), Box(40, 62, 360, 82)]
+
+    assert blocks(lines, papers(page)) == [Box(40, 40, 360, 82)]

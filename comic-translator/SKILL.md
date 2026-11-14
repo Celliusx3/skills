@@ -1,7 +1,7 @@
 ---
 name: comic-translator
-description: Translates the text in comic, manga or webtoon pages into another language, in place, erasing the original lettering and lettering the translation. Use when the person shares comic pages, an image or a .zip/.cbz chapter, and asks for a translation.
-compatibility: Requires running shell commands with uv, viewing image files, internet access once to fetch its models (about 215 MB), and about 1.5 GB of free memory while rendering.
+description: Translates the speech bubbles and captions of comic, manga or webtoon pages into another language, in place, erasing the original lettering and lettering the translation. Use when the person shares comic pages, as images or a .zip/.cbz chapter, and asks for them translated, even if they only say "translate this page". Not for photos, documents or screenshots that are not comics.
+compatibility: Requires running shell commands with uv, viewing image files, internet access once to fetch its models (about 215 MB), and about 1 GB of free memory while rendering.
 ---
 
 # Comic translator
@@ -10,8 +10,8 @@ compatibility: Requires running shell commands with uv, viewing image files, int
 
 - **`scripts/run.py`**: `detect` finds the text on every page and writes a work
   folder; `render` erases each entry's text and letters its translation; `pack`
-  puts the translated pages into one archive. `--help` shows all three. Each prints one JSON object, or one line starting
-  `error:` that says what to fix.
+  puts the translated pages into one archive. `--help` shows all three. Each
+  prints one JSON object, or one line starting `error:` that says what to fix.
 
 Run each command below exactly as written, from this skill's folder. Do not
 modify it, read the scripts, or copy them: the folder may be read-only, and
@@ -72,7 +72,9 @@ Progress:
      or painted on a thing, a title or logo, a poster, a chart's labels, a
      sound effect drawn on the art, outlined or not, credits, a watermark, or
      a box with no text. When in doubt, ask whether the text sits in a bubble
-     or a caption box: if not, delete it;
+     or a caption box: if not, delete it. A kept entry, even with the same
+     text, is erased and lettered again in plain type, and erasing drawn text
+     damages the picture round it;
    - text no box holds: add an entry with a new `id`;
    - text written in columns, or a right-to-left target language: add
      `"direction": "vertical"` or `"rtl"`.
@@ -83,32 +85,36 @@ Progress:
    {"id": 2, "box": {"left": 330, "top": 50, "right": 470, "bottom": 120}, "original": "", "translation": ""}
    {"id": 2, "box": {"left": 330, "top": 50, "right": 470, "bottom": 120}, "original": "...y el toque final.", "translation": "...and the final touch."}
    ```
-3. **Render and check**:
+3. **Render and check**, looping until every page is clean:
    ```bash
    cd "<this skill's folder>" && uv run scripts/run.py render "<work folder>"
    ```
-   It checks the notes of the pages it renders, then translates each page
-   from its original. Name pages after the work folder to render only those,
-   such as `render "<work folder>" 005 006 007`. It refuses while a page it
-   renders still has an entry with no translation, and names those pages:
-   translate each entry, or delete it to leave its text as it is.
-   It refuses a translation holding a symbol the font cannot draw, such as
-   `♪` or an emoji, and names the entry: write it in words or leave it out.
-   Each page's `warnings` name a box now far from where detect found its
-   text, with the box detect found: fix those first. They also name a box
-   holding more lines than its `translation` reads: read the whole box again. Each page's
-   `left as it is` lists the ids of text detect found whose entry was
-   deleted. Find each by its box in `detected/<page>.json` on the ruled
-   `review` images: one in a speech bubble or a caption, however short
-   (`¡FUERON TIEMPOS LOCOS!`, `EE, ESTÁ BIEN.`), was deleted by mistake, so
-   copy its entry back into the notes, translate it, and render that page. Then look at the
-   `result-boxes/<page>-<n>.jpg` sheets, each box cut from the translated
-   page (a `result` stretch for a closer look). Where text is left over, a
-   box reached onto the art, or a translation reads badly, edit the notes and
-   render only those pages again, naming them after the work folder, such as
-   `render "<work folder>" 005 012`, until every page is clean. A piece of text still not clean
-   after you changed its entry twice: delete its entry, and say so in your
-   answer.
+   Name pages after the work folder to render only those, such as
+   `render "<work folder>" 005 006 007`.
+   1. When render refuses, fix what it names and render again:
+      - an entry with no translation: translate it, or delete it to leave
+        its text as it is;
+      - a symbol the font cannot draw, such as `♪` or an emoji: write it in
+        words or leave it out. The box still covers the symbol in the
+        original, so it is erased.
+   2. Each page's `warnings` come first:
+      - a box far from where detect found its text, with the box detect
+        found: put the box back on its text;
+      - a box holding more lines than its `translation` reads: read the whole
+        box again.
+   3. Each page's `left as it is` lists the ids of text detect found whose
+      entry was deleted. Find each by its box in `detected/<page>.json` on
+      the ruled `review` images. One in a speech bubble or a caption, however
+      short (`¡FUERON TIEMPOS LOCOS!`, `EE, ESTÁ BIEN.`), was deleted by
+      mistake: copy its entry back into the notes and translate it.
+   4. Look at the `result-boxes/<page>-<n>.jpg` sheets, each box cut from the
+      translated page (a `result` stretch for a closer look). Where text is
+      left over, a box reached onto the art, or a translation reads badly,
+      edit the notes.
+   5. Render the pages you changed, naming them, such as
+      `render "<work folder>" 005 012`, and go back to 1. Stop when no page
+      changed. A piece of text still not clean after you changed its entry
+      twice: delete its entry, and say so in your answer.
 4. **Hand over**, in two steps:
    - pack the translated pages next to the input, named as it with the
      target language's English name before its extension, as `chapter.zip`
@@ -117,8 +123,8 @@ Progress:
      cd "<this skill's folder>" && uv run scripts/run.py pack "<work folder>" "<input's folder>/<input's name>-<language>.zip"
      ```
      It refuses while a page is untranslated, or its notes changed after it
-     was rendered, and names those pages: render them and check them, as in
-     step 3, before packing again.
+     was rendered, and names those pages. Working alone, render and check
+     them as in step 3, then pack again; a Combine reports blocked instead.
    - send that zip to the person with your tool for giving them a file, then
      write your answer.
 
@@ -178,19 +184,14 @@ and which part's task names them, so your bot sends them back to that part.
   (as with a longer timeout) starts a second copy.
 - A translation keeps the original's case: words in capitals stay in
   capitals (`¡NO! Ni se te ocurra.` is `NO! Don't even think about it.`).
-- A sound inside a bubble is translated (`¡COF, COF!` is `COUGH, COUGH!`). A
-  sound effect drawn on the art (`SHH SHH`, `PLOP`) is left alone by deleting
-  its entry: an entry kept, even with the same text, is erased and lettered
-  again in plain type, and erasing it damages the picture round it.
+- A sound inside a bubble is translated (`¡COF, COF!` is `COUGH, COUGH!`);
+  one drawn on the art (`SHH SHH`, `PLOP`) is deleted, as in step 2.
 - Read the text yourself from the `boxes` sheets. Do not install OCR or other
   packages to read it: they are large downloads, and the sheets are enlarged
   for reading.
 - A box must hold every mark of its text, the dots of `!` and `?` too, and
   stay on the bubble except where a letter crosses its outline. Change a
   box's numbers only to fix it, reading them off the ruler.
-- A translation uses letters and common punctuation only: the lettering font
-  cannot draw symbols such as ♥ or emoji. The box still covers a symbol in
-  the original, so it is erased.
 - An empty `translation` erases the text and letters nothing; on artwork that
   can leave a smudge, so delete the entry there instead.
 

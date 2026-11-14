@@ -10,13 +10,13 @@
     ],
     "files_as": "one .zip of the four pages, in this order",
     "expected_behavior": [
-      "Runs detect and render from the skill's folder with `uv run scripts/run.py`, without reading or copying the scripts",
+      "Runs detect, render and pack from the skill's folder with `uv run scripts/run.py`, without reading or copying the scripts",
       "Asks before installing uv when it is missing, and installs it only after a yes",
       "Translates every speech bubble: '...y el toque final.' becomes '...and the final touch.' or close",
       "Leaves the sound effects drawn on the art (SHH SHH, PLOP) as they are, by deleting their entries",
       "Keeps every box as detect wrote it unless fixing it, and render reports no warnings",
       "Letters the title page's 'Pepper and Carrot / Episode 1: …' once, whole, with no word cut by another box",
-      "Hands over a zip of the four translated pages named pepper-carrot-ep01-es-english.zip next to the input"
+      "Packs the four translated pages with pack into pepper-carrot-ep01-es-english.zip next to the input, and hands it over"
     ]
   },
   {
@@ -29,7 +29,7 @@
     "expected_behavior": [
       "Uses the comic-translator skill for a single image, not only for archives",
       "Keeps the original's case: '¡NO! Ni se te ocurra.' (only '¡NO!' in capitals) becomes 'NO! Don't even think about it.' or close",
-      "Hands over the translated page, zipped next to the input"
+      "Hands over the translated page, packed with pack next to the input"
     ]
   },
   {
@@ -67,13 +67,13 @@
       "Acts as Prepare: runs detect, then stops before reading any page",
       "Writes {} to names.json in the work folder",
       "Reports ready with 'The chapter has 12 pages, so it is translated in 3 parts.'",
-      "Lists three Part task lines for pages 000-003, 004-007 and 008-011, each with the work folder's full path",
-      "Lists one Combine task line that names the work folder and hands over <input>-english.zip next to the input"
+      "Lists three Part task lines to start now, each to translate and render pages 000-003, 004-007 and 008-011, with the work folder's full path",
+      "Lists one Combine task line to start only after every part reports ready, that packs the work folder and hands over <input>-english.zip next to the input"
     ]
   },
   {
     "skills": ["comic-translator"],
-    "query": "Part: translate pages 000-001 of the chapter in <work folder> with the comic-translator skill.",
+    "query": "Part: translate and render pages 000-001 of the chapter in <work folder> with the comic-translator skill.",
     "files": [
       "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",
       "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P01.jpg",
@@ -85,13 +85,13 @@
       "Reads and edits the notes of pages 000 and 001 only, and leaves 002 and 003 untouched",
       "Reads names.json before each page and keeps 'Pepper' as it is",
       "Adds any new name it meets, such as 'Carrot', to names.json without dropping 'Pepper'",
-      "Does not run render",
-      "Reports ready with how many pages and entries it translated"
+      "Renders pages 000 and 001 only, naming them after the work folder, and looks at their result-boxes sheets",
+      "Reports ready, once both pages are clean, with how many pages and entries it translated"
     ]
   },
   {
     "skills": ["comic-translator"],
-    "query": "Combine: render the chapter in <work folder> with the comic-translator skill, and hand over <input's folder>/chapter-english.zip.",
+    "query": "Combine: pack the chapter in <work folder> with the comic-translator skill, and hand over <input's folder>/chapter-english.zip.",
     "files": [
       "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",
       "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P01.jpg",
@@ -100,10 +100,19 @@
     ],
     "files_as": "a work folder made by detect from one .zip of the four pages, with pages 000 and 001 translated and 002 and 003 as detect left them",
     "expected_behavior": [
-      "Runs render, which refuses and names pages 002 and 003",
-      "Does not translate pages 002 or 003 itself",
-      "Reports blocked and names pages 002 and 003",
+      "Runs pack, which refuses and names pages 002 and 003",
+      "Does not read, translate or render any page itself",
+      "Reports blocked, naming pages 002 and 003 and the part task that holds them",
       "Hands over no zip"
+    ]
+  },
+  {
+    "skills": [],
+    "query": "Translate this email to Spanish: \"Hi team, the meeting moved to 3pm, see you there.\"",
+    "files": [],
+    "expected_behavior": [
+      "Does not load the comic-translator skill",
+      "Answers with the Spanish text directly"
     ]
   }
 ]

@@ -24,7 +24,7 @@ NEAR = 40
 SPECK_SHARE = 0.01
 LETTER_SHARE = 0.5
 PAD_SHARE = 0.15
-EVEN_EDGE = 15.0
+EVEN_SHARE = 0.85
 GHOST = 90
 GHOST_REACH = 2
 SMALL_PIECE = 0.1
@@ -179,11 +179,14 @@ def commonest(pixels: Pixels) -> NDArray[np.int16]:
 
 def flat_colour(pixels: Pixels, hole: Mask, box_mask: Mask) -> str | None:
     """When the line just outside the hole is even, the paper's commonest exact colour, taken a
-    little away from the box where letters bleed no tint into it; else None."""
+    little away from the box where letters bleed no tint into it; else None. The line is even
+    when EVEN_SHARE of it is near one colour, so a note or an outline touching it is no bar."""
     edge = ndimage.binary_dilation(hole) & ~hole
-    if not edge.any() or float(pixels[edge].std(axis=0).max()) > EVEN_EDGE:
+    if not edge.any():
         return None
     near = np.median(pixels[edge], axis=0).astype(np.int16)
+    if float((distance(pixels[edge], near) <= NEAR).mean()) < EVEN_SHARE:
+        return None
     away = ndimage.binary_dilation(box_mask, iterations=AWAY) & ~ndimage.binary_dilation(
         box_mask, iterations=RING
     )

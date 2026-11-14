@@ -70,3 +70,12 @@ def test_a_dark_panel_stays_paper_while_dark_letters_of_its_colour_are_text() ->
 
     assert paper[:30].all()
     assert not paper[60:70, 50:60].any()
+
+
+def test_a_mark_beside_the_text_does_not_stop_even_paper_being_filled_flat() -> None:
+    page = bubble("white")
+    ImageDraw.Draw(page).rectangle((296, 112, 312, 138), fill="black")
+
+    done = erased(page, BOX, FlatGrey)
+
+    assert done.getpixel((120, 120)) == (255, 255, 255)

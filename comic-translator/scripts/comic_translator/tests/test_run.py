@@ -34,6 +34,12 @@ def notes_of(detected: dict) -> Path:
     return Path(detected["work"]) / "notes" / "001.json"
 
 
+def translate_every_entry(work: str) -> None:
+    for notes in (Path(work) / "notes").glob("*.json"):
+        entries = json.loads(notes.read_text())
+        notes.write_text(json.dumps([{**entry, "translation": "hi"} for entry in entries]))
+
+
 def test_detect_writes_each_page_s_notes_its_own_copy_and_images_to_read(detected: dict) -> None:
     work = Path(detected["work"])
     [page] = detected["pages"]
@@ -86,7 +92,7 @@ def test_render_translates_the_page_from_the_edited_notes(detected: dict) -> Non
 def test_render_warns_of_a_box_moved_far_from_its_text(detected: dict) -> None:
     entries = json.loads(notes_of(detected).read_text())
     far = {"left": 10, "top": 500, "right": 100, "bottom": 560}
-    notes_of(detected).write_text(json.dumps([{**entries[0], "box": far}]))
+    notes_of(detected).write_text(json.dumps([{**entries[0], "box": far, "translation": "hi"}]))
 
     code, result = called(["render", detected["work"]])
 
@@ -96,6 +102,7 @@ def test_render_warns_of_a_box_moved_far_from_its_text(detected: dict) -> None:
 
 
 def test_render_refuses_while_another_render_runs_there(detected: dict) -> None:
+    translate_every_entry(detected["work"])
     (Path(detected["work"]) / run.RUNNING).write_text(str(os.getpid()))
 
     code, message = called(["render", detected["work"]])
@@ -105,6 +112,7 @@ def test_render_refuses_while_another_render_runs_there(detected: dict) -> None:
 
 
 def test_render_goes_ahead_past_the_mark_of_a_render_that_died(detected: dict) -> None:
+    translate_every_entry(detected["work"])
     (Path(detected["work"]) / run.RUNNING).write_text("999999999")
 
     code, _ = called(["render", detected["work"]])
@@ -121,6 +129,7 @@ def test_a_jpeg_page_is_translated_to_a_jpeg_and_folders_among_pages_are_skipped
     Image.open(png).convert("RGB").save(page)
     _, result = called(["detect", str(page)])
     (Path(result["work"]) / "pages" / "leftover").mkdir()
+    translate_every_entry(result["work"])
 
     code, rendered = called(["render", result["work"]])
 
@@ -151,3 +160,23 @@ def test_a_wrong_call_says_what_to_do(argv: list[str], complaint: str) -> None:
 
     assert code == 1
     assert complaint in message
+
+
+def test_render_refuses_a_chapter_with_an_untranslated_entry(detected: dict) -> None:
+    code, text = called(["render", detected["work"]])
+
+    assert code == 1
+    assert text == (
+        "error: pages 001 still have entries with no translation: translate each one, or "
+        "delete it to leave its text as it is"
+    )
+    assert not (Path(detected["work"]) / "translated").exists()
+
+
+def test_render_takes_a_page_whose_entries_were_all_deleted(detected: dict) -> None:
+    notes_of(detected).write_text("[]")
+
+    code, result = called(["render", detected["work"]])
+
+    assert code == 0
+    assert result["pages"][0]["page"] == "001"

@@ -32,7 +32,14 @@ from comic_translator.models import (
     cache_folder,
     session_of,
 )
-from comic_translator.notes import Entry, NotesError, moved, read_notes, write_notes
+from comic_translator.notes import (
+    Entry,
+    NotesError,
+    moved,
+    read_notes,
+    untranslated_pages,
+    write_notes,
+)
 from comic_translator.review import overview, review_images
 from comic_translator.sheets import box_sheets
 
@@ -64,6 +71,10 @@ RENDER_FILES = (
     " every box cut from the result, numbered; result/<page>-<n>.jpg the result in ruled stretches"
 )
 RUNNING = ".rendering"
+UNTRANSLATED = (
+    "pages {pages} still have entries with no translation: translate each one, or delete it to "
+    "leave its text as it is"
+)
 JPEG_QUALITY = 90
 
 
@@ -225,6 +236,12 @@ def render(work: Path) -> dict[str, object]:
     pages = sorted(p for p in (work / "pages").iterdir() if p.is_file())
     if not pages:
         raise DetectError(f"{work} holds no pages; run detect first")
+    notes = {
+        p.stem: read_notes(work / "notes" / f"{p.stem}.json", page_image(p).size) for p in pages
+    }
+    missing = untranslated_pages(notes)
+    if missing:
+        raise DetectError(UNTRANSLATED.format(pages=", ".join(missing)))
     inpainter = Inpainter()
     with alone(work):
         done = [rendered_page(p, work, inpainter) for p in pages]

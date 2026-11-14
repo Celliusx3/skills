@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -123,3 +124,10 @@ def write_notes(path: Path, entries: list[Entry]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps([written(entry) for entry in entries], indent=1, ensure_ascii=False))
     return path
+
+
+def untranslated_pages(notes: Mapping[str, Sequence[Entry]]) -> list[str]:
+    """The pages, in order, that still hold an entry with no translation."""
+    return [
+        page for page, entries in notes.items() if any(not e.translation.strip() for e in entries)
+    ]

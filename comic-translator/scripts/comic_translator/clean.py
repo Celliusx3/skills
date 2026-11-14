@@ -19,6 +19,7 @@ KINDS = 8
 PAPER_SHARE = 0.25
 MOST = 0.5
 AWAY_LEAST = 0.02
+BEHIND_LEAST = 0.02
 TEXT_LIKELY = 77
 NEAR = 40
 SPECK_SHARE = 0.01
@@ -74,13 +75,21 @@ def paper_colours(
     pixels: Pixels, box_mask: Mask, near: Mask | None = None
 ) -> list[NDArray[np.int16]]:
     """What the box's text is printed on: where the text finder saw text, the colours covering
-    PAPER_SHARE of the strip just past it in the box, as a burst behind the letters is, while a
-    panel further off is not; else the colours covering PAPER_SHARE of the box's inner edge,
-    and any covering MOST of the whole box, as a bubble does when the box reaches past it."""
+    PAPER_SHARE of the strip just past it in the box and found behind the letters too, as a
+    burst's is, while a panel the box reaches onto past a short last line is not; else the
+    colours covering PAPER_SHARE of the box's inner edge, and any covering MOST of the whole
+    box, as a bubble does when the box reaches past it."""
     if near is not None:
         strip = ndimage.binary_dilation(near, iterations=AWAY) & ~near & box_mask
         if strip.sum() >= AWAY_LEAST * box_mask.sum():
-            return shares_of(pixels[strip], PAPER_SHARE)
+            band = pixels[near & box_mask]
+            behind = [
+                colour
+                for colour in shares_of(pixels[strip], PAPER_SHARE)
+                if float((distance(band, colour) <= NEAR).mean()) >= BEHIND_LEAST
+            ]
+            if behind:
+                return behind
     rim = box_mask & ~ndimage.binary_erosion(box_mask, iterations=RIM)
     return [*shares_of(pixels[rim], PAPER_SHARE), *shares_of(pixels[box_mask], MOST)]
 

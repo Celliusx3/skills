@@ -164,3 +164,22 @@ def test_letters_on_a_tinted_caption_running_past_the_box_are_erased_and_its_bor
 
     assert after[108:123, 110:288].min() > 100
     assert np.array_equal(after[104:106], before[104:106])
+
+
+def test_a_caption_narrowing_under_its_last_line_is_filled_with_its_paper_not_the_panel() -> None:
+    page = Image.new("RGB", (400, 300), (104, 189, 234))
+    likely = Image.new("L", (400, 300), 0)
+    pen, seen = ImageDraw.Draw(page), ImageDraw.Draw(likely)
+    pen.rectangle((80, 90, 330, 130), fill="white")
+    pen.rectangle((80, 130, 258, 156), fill="white")
+    for top, right in ((100, 320), (116, 320), (132, 250)):
+        for x in range(90, right, 16):
+            pen.rectangle((x, top, x + 12, top + 11), fill="black")
+        seen.rectangle((90, top + 3, right, top + 8), fill=255)
+
+    patch = erased_patch(page, Box(88, 98, 322, 146), FlatGrey, likely)
+    page.paste(patch.image, patch.at)
+    after = np.asarray(page)
+
+    assert after[100:143, 90:246].min() == 255
+    assert page.getpixel((300, 140)) == (104, 189, 234)

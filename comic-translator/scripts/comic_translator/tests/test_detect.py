@@ -185,9 +185,25 @@ def test_lines_on_white_and_on_pink_paper_touching_become_two_blocks() -> None:
     assert blocks(lines, papers(page)) == [Box(40, 40, 360, 60), Box(40, 72, 360, 92)]
 
 
-def test_lines_overlapping_on_one_stretch_of_two_colours_stay_one_block() -> None:
+def test_lines_overlapping_on_one_stretch_of_two_colours_stay_two_blocks() -> None:
     page = Image.new("RGB", (400, 300), "white")
     ImageDraw.Draw(page).rectangle((150, 72, 380, 140), fill=(250, 200, 150))
     lines = [Box(40, 40, 200, 70), Box(150, 60, 360, 100)]
 
-    assert blocks(lines, papers(page)) == [Box(40, 40, 360, 100)]
+    assert blocks(lines, papers(page)) == [Box(40, 40, 200, 70), Box(150, 60, 360, 100)]
+
+
+def test_a_bubble_s_word_and_a_banner_tucked_under_it_become_two_blocks() -> None:
+    page = Image.new("RGB", (700, 700), (248, 248, 248))
+    ImageDraw.Draw(page).rectangle((480, 630, 640, 680), fill=(232, 240, 240))
+    lines = [Box(439, 597, 533, 637), Box(499, 632, 617, 664)]
+
+    assert blocks(lines, papers(page)) == lines
+
+
+def test_a_caption_s_lines_on_two_shades_of_its_paper_stay_one_block() -> None:
+    page = Image.new("RGB", (500, 300), (248, 248, 248))
+    ImageDraw.Draw(page).rectangle((0, 116, 500, 300), fill=(226, 226, 226))
+    lines = [Box(85, 100, 424, 117), Box(77, 116, 432, 133), Box(55, 132, 454, 149)]
+
+    assert blocks(lines, papers(page)) == [Box(55, 100, 454, 149)]

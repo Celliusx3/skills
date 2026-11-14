@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -173,9 +174,17 @@ def overlapping(one: Box, other: Box) -> bool:
     return across > 0 and down > 0
 
 
-def merged(boxes: list[Box]) -> list[Box]:
-    """The boxes with any two that overlap joined into one, until none overlap, so two entries
-    never erase and letter over each other."""
+def column_overlapping(one: Box, other: Box) -> bool:
+    """Whether two boxes overlap and read as one column, as a caption's lines over two shades of
+    its paper do, while a bubble's word and a sign tucked under it to one side do not."""
+    short = min(one.bottom - one.top, other.bottom - other.top)
+    upper, lower = sorted((one, other), key=lambda box: box.top)
+    return overlapping(one, other) and one_column(upper, lower, short)
+
+
+def merged(boxes: list[Box], together: Callable[[Box, Box], bool] = overlapping) -> list[Box]:
+    """The boxes with any two `together` joined into one, until none are, so two entries never
+    erase and letter over each other."""
     result = list(boxes)
     while True:
         pair = next(
@@ -183,7 +192,7 @@ def merged(boxes: list[Box]) -> list[Box]:
                 (i, k)
                 for i in range(len(result))
                 for k in range(i + 1, len(result))
-                if overlapping(result[i], result[k])
+                if together(result[i], result[k])
             ),
             None,
         )
@@ -240,12 +249,17 @@ def on_sheets(lines: list[Box], paper: Paper) -> dict[int, list[list[Box]]]:
 
 
 def blocks(lines: list[Box], paper: Paper) -> list[Box]:
-    """Each group of stacked lines on one sheet of paper as one block, overlapping blocks in one
-    stretch joined, in reading order; lines in two bubbles never share a block."""
+    """Each group of stacked lines on one sheet of paper as one block, overlapping blocks on one
+    sheet joined, and on two sheets of one stretch only when they read as one column, in reading
+    order; lines in two bubbles, or in a bubble and on a sign tucked under it, never share a
+    block."""
     found = [
         block
         for kept in on_sheets(lines, paper).values()
-        for block in merged([joined(group) for sheet in kept for group in groups(sheet)])
+        for block in merged(
+            [b for sheet in kept for b in merged([joined(group) for group in groups(sheet)])],
+            column_overlapping,
+        )
     ]
     return sorted(found, key=lambda box: (box.top, box.left))
 

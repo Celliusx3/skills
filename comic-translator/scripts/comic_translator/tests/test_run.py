@@ -5,6 +5,9 @@ from __future__ import annotations
 import io
 import json
 import os
+import threading
+import time
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -92,7 +95,7 @@ def test_render_translates_the_page_from_the_edited_notes(detected: dict) -> Non
     ]
     assert (work / "translated" / "001.png").is_file()
     assert (work / "result-boxes" / "001-1.jpg").is_file()
-    assert not (work / run.RUNNING).exists()
+    assert not list(work.glob(".rendering*"))
 
 
 def test_render_warns_of_a_box_moved_far_from_its_text(detected: dict) -> None:
@@ -107,19 +110,22 @@ def test_render_warns_of_a_box_moved_far_from_its_text(detected: dict) -> None:
     assert warning.startswith("001 #1: its box is far from where detect found text (")
 
 
-def test_render_refuses_while_another_render_runs_there(detected: dict) -> None:
+def test_render_refuses_a_page_another_render_is_drawing(detected: dict) -> None:
     translate_every_entry(detected["work"])
-    (Path(detected["work"]) / run.RUNNING).write_text(str(os.getpid()))
+    (Path(detected["work"]) / ".rendering-001").write_text(str(os.getpid()))
 
     code, message = called(["render", detected["work"]])
 
     assert code == 1
-    assert "render is already running on this work folder" in message
+    assert message == (
+        "error: render is already running on page 001; wait for it to finish rather than"
+        " starting it again"
+    )
 
 
 def test_render_goes_ahead_past_the_mark_of_a_render_that_died(detected: dict) -> None:
     translate_every_entry(detected["work"])
-    (Path(detected["work"]) / run.RUNNING).write_text("999999999")
+    (Path(detected["work"]) / ".rendering-001").write_text("999999999")
 
     code, _ = called(["render", detected["work"]])
 
@@ -268,3 +274,113 @@ def test_render_warns_of_a_box_of_several_lines_whose_translation_reads_one_word
     assert code == 0
     expected = '001 #1: its box holds 2 lines of text but its translation reads only "GLIX."'
     assert result["pages"][0]["warnings"] == ([f"{expected}; read the whole box"] if warned else [])
+
+
+def test_render_of_named_pages_goes_ahead_while_another_page_is_untranslated(
+    detected: dict,
+) -> None:
+    work = second_page(detected)
+    entries = json.loads(notes_of(detected).read_text())
+    (work / "notes" / "002.json").write_text(
+        json.dumps([{**entry, "translation": "hi"} for entry in entries])
+    )
+
+    code, result = called(["render", detected["work"], "002"])
+
+    assert code == 0
+    assert [page["page"] for page in result["pages"]] == ["002"]
+
+
+def test_render_of_named_pages_refuses_only_for_their_own_untranslated_entries(
+    detected: dict,
+) -> None:
+    second_page(detected)
+
+    code, text = called(["render", detected["work"], "002"])
+
+    assert code == 1
+    assert text.startswith("error: pages 002 still have entries with no translation")
+
+
+def test_render_waits_for_another_render_in_the_work_folder_to_finish(detected: dict) -> None:
+    work = second_page(detected)
+    translate_every_entry(detected["work"])
+    finished: list[int] = []
+    with run.turn_of(work, ["001"]):
+        other = threading.Thread(
+            target=lambda: finished.append(called(["render", detected["work"], "002"])[0])
+        )
+        other.start()
+        time.sleep(0.5)
+        assert finished == []
+    other.join(timeout=30)
+
+    assert finished == [0]
+
+
+def rendered_chapter(detected: dict) -> Path:
+    work = second_page(detected)
+    translate_every_entry(detected["work"])
+    assert called(["render", detected["work"]])[0] == 0
+    return work
+
+
+def test_pack_writes_the_translated_pages_in_order(detected: dict, tmp_path: Path) -> None:
+    rendered_chapter(detected)
+    archive = tmp_path / "chapter-english.zip"
+
+    code, result = called(["pack", detected["work"], str(archive)])
+
+    assert code == 0
+    assert result == {"archive": str(archive), "pages": 2}
+    assert zipfile.ZipFile(archive).namelist() == ["001.png", "002.png"]
+
+
+def test_pack_refuses_a_chapter_with_an_untranslated_entry(detected: dict, tmp_path: Path) -> None:
+    rendered_chapter(detected)
+    entries = json.loads(notes_of(detected).read_text())
+    (Path(detected["work"]) / "notes" / "002.json").write_text(
+        json.dumps([{**entries[0], "translation": ""}])
+    )
+
+    code, text = called(["pack", detected["work"], str(tmp_path / "c.zip")])
+
+    assert code == 1
+    assert text.startswith("error: pages 002 still have entries with no translation")
+    assert not (tmp_path / "c.zip").exists()
+
+
+def test_pack_refuses_pages_whose_notes_changed_after_their_render(
+    detected: dict, tmp_path: Path
+) -> None:
+    work = rendered_chapter(detected)
+    time.sleep(0.01)
+    (work / "notes" / "002.json").write_text((work / "notes" / "002.json").read_text())
+    (work / "translated" / "001.png").unlink()
+
+    code, text = called(["pack", detected["work"], str(tmp_path / "c.zip")])
+
+    assert code == 1
+    assert text == (
+        "error: pages 001, 002 are not rendered since their notes last changed: render them,"
+        " and look at what render gives back"
+    )
+    assert not (tmp_path / "c.zip").exists()
+
+
+def test_pack_refuses_an_archive_name_that_is_not_a_zip_or_cbz(
+    detected: dict, tmp_path: Path
+) -> None:
+    rendered_chapter(detected)
+
+    code, text = called(["pack", detected["work"], str(tmp_path / "c.tar")])
+
+    assert code == 1
+    assert text == f"error: {tmp_path / 'c.tar'} must end in .zip or .cbz"
+
+
+def test_help_says_how_to_pack() -> None:
+    code, text = called(["--help"])
+
+    assert code == 0
+    assert "pack <work folder> <archive>" in text

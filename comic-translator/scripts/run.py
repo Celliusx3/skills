@@ -12,10 +12,9 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
-from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+import zipfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TextIO
 
@@ -52,10 +51,11 @@ from comic_translator.notes import (
 )
 from comic_translator.review import overview, review_images
 from comic_translator.sheets import box_sheets
+from comic_translator.turns import turn_of
 
 USAGE = (
     "usage: run.py detect <image or archive> | run.py render <work folder> [page ...]"
-    " | run.py --help"
+    " | run.py pack <work folder> <archive> | run.py --help"
 )
 HELP = """usage: uv run scripts/run.py COMMAND ARGUMENT
 
@@ -68,13 +68,18 @@ commands:
   render <work folder> [page ...]
                                 erase each entry's text and letter its translation, from the
                                 original pages, into the work folder's translated/ pages; name
-                                pages, such as 005, to redo only those
+                                pages, such as 005, to redo only those; a render waits
+                                while another runs in the same work folder
+  pack <work folder> <archive>  put every translated page, in page order, into a new .zip or
+                                .cbz; refused while a page is untranslated, or its notes
+                                changed after it was rendered
 
 Each prints one JSON object, or one line starting "error:" saying what to fix.
 
 examples:
   uv run scripts/run.py detect chapter.zip
-  uv run scripts/run.py render chapter-work"""
+  uv run scripts/run.py render chapter-work 005 006
+  uv run scripts/run.py pack chapter-work chapter-english.zip"""
 FAILURES = (DetectError, ModelError, NotesError, OSError)
 DETECT_FILES = (
     "in the work folder, for each page: notes/<page>.json to edit; overview/<page>.jpg the whole"
@@ -85,10 +90,13 @@ RENDER_FILES = (
     "in the work folder, for each page: translated/<page> the result; result-boxes/<page>-<n>.jpg"
     " every box cut from the result, numbered; result/<page>-<n>.jpg the result in ruled stretches"
 )
-RUNNING = ".rendering"
 UNTRANSLATED = (
     "pages {pages} still have entries with no translation: translate each one, or delete it to "
     "leave its text as it is"
+)
+UNRENDERED = (
+    "pages {pages} are not rendered since their notes last changed: render them, and look at"
+    " what render gives back"
 )
 UNDRAWN = "page {found}, which the lettering font cannot draw: write it in words or leave it out"
 JPEG_QUALITY = 90
@@ -254,35 +262,6 @@ def rendered_page(path: Path, work: Path, inpainter: Inpainter) -> dict[str, obj
     }
 
 
-def alive(pid: int) -> bool:
-    if pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
-@contextmanager
-def alone(work: Path) -> Iterator[None]:
-    """Render on its own in `work`: refused while another render there is still running."""
-    mark = work / RUNNING
-    holder = mark.read_text().strip() if mark.is_file() else ""
-    if holder.isdigit() and alive(int(holder)):
-        raise DetectError(
-            "render is already running on this work folder; wait for it to finish rather than"
-            " starting it again"
-        )
-    mark.write_text(str(os.getpid()))
-    try:
-        yield
-    finally:
-        mark.unlink(missing_ok=True)
-
-
 def chosen(pages: Sequence[Path], names: Sequence[str]) -> list[Path]:
     """The pages named, in page order, or every page when none is named."""
     if not names:
@@ -306,20 +285,54 @@ def ready(notes: dict[str, list[Entry]]) -> None:
         raise DetectError(UNDRAWN.format(found="; page ".join(symbols)))
 
 
-def render(work: Path, names: Sequence[str]) -> dict[str, object]:
-    """The named pages of the work folder, or every page, translated from their notes."""
+def pages_of(work: Path) -> list[Path]:
     pages = sorted(p for p in (work / "pages").iterdir() if p.is_file())
     if not pages:
         raise DetectError(f"{work} holds no pages; run detect first")
-    notes = {
+    return pages
+
+
+def notes_of(work: Path, pages: Sequence[Path]) -> dict[str, list[Entry]]:
+    return {
         p.stem: read_notes(work / "notes" / f"{p.stem}.json", page_image(p).size) for p in pages
     }
-    ready(notes)
-    redo = chosen(pages, names)
+
+
+def render(work: Path, names: Sequence[str]) -> dict[str, object]:
+    """The named pages of the work folder, or every page, translated from their notes."""
+    redo = chosen(pages_of(work), names)
+    ready(notes_of(work, redo))
     inpainter = Inpainter()
-    with alone(work):
+    with turn_of(work, [p.stem for p in redo]):
         done = [rendered_page(p, work, inpainter) for p in redo]
     return {"work": str(work), "files": RENDER_FILES, "pages": done}
+
+
+def unrendered(work: Path, pages: Sequence[Path]) -> list[str]:
+    """The pages with no translated page, or one older than their notes."""
+    return [
+        p.stem
+        for p in pages
+        if not (work / "translated" / p.name).is_file()
+        or (work / "translated" / p.name).stat().st_mtime
+        < (work / "notes" / f"{p.stem}.json").stat().st_mtime
+    ]
+
+
+def pack(work: Path, archive: Path) -> dict[str, object]:
+    """Every translated page, in page order, in a new archive; refused while any page is
+    untranslated or not rendered since its notes changed."""
+    if archive.suffix.lower() not in (".zip", ".cbz"):
+        raise DetectError(f"{archive} must end in .zip or .cbz")
+    pages = pages_of(work)
+    ready(notes_of(work, pages))
+    stale = unrendered(work, pages)
+    if stale:
+        raise DetectError(UNRENDERED.format(pages=", ".join(stale)))
+    with zipfile.ZipFile(archive, "w") as packed:
+        for p in pages:
+            packed.write(work / "translated" / p.name, p.name)
+    return {"archive": str(archive), "pages": len(pages)}
 
 
 def command(argv: Sequence[str]) -> dict[str, object]:
@@ -334,6 +347,11 @@ def command(argv: Sequence[str]) -> dict[str, object]:
             if not (work / "pages").is_dir():
                 raise DetectError(f"{folder} is not a work folder from detect")
             return render(work, names)
+        case ["pack", folder, archive]:
+            work = Path(folder).expanduser().resolve()
+            if not (work / "pages").is_dir():
+                raise DetectError(f"{folder} is not a work folder from detect")
+            return pack(work, Path(archive).expanduser().resolve())
         case _:
             raise DetectError(USAGE)
 

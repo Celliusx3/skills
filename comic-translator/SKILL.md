@@ -9,8 +9,8 @@ compatibility: Requires running shell commands with uv, viewing image files, int
 ## Available scripts
 
 - **`scripts/run.py`**: `detect` finds the text on every page and writes a work
-  folder; `render` erases each entry's text and letters its translation.
-  `--help` shows both. Each prints one JSON object, or one line starting
+  folder; `render` erases each entry's text and letters its translation; `pack`
+  puts the translated pages into one archive. `--help` shows all three. Each prints one JSON object, or one line starting
   `error:` that says what to fix.
 
 Run each command below exactly as written, from this skill's folder. Do not
@@ -61,12 +61,18 @@ Progress:
    - `original`: the text in the box exactly as it reads;
    - `translation`: it in the language the person asked for (English when
      they don't say), punctuated as that language does;
-   - keep the entry for what sits in a speech bubble, a burst or a caption,
-     sounds too, with `translation` the same as `original` when it already
-     reads right, so it is lettered like the rest of the page;
-   - delete the entry to leave its text as it is: sound effects drawn
-     straight on the art, outlined or not, signs, watermarks, credits, or a
-     box with no text;
+   - keep the entry only for text inside a speech bubble, a thought bubble or
+     a caption box, sounds in a bubble too, with `translation` the same as
+     `original` when it already reads right, so it is lettered like the rest
+     of the page;
+   - delete every other entry, to leave its text as it is: text drawn as part
+     of the picture is never translated. That is a banner (`BIENVENIDOS`), a
+     shop or street sign (`FLORISTA`, `PANADERÍA`), a label on a box or a
+     building (`TORNILLOS`), a note, bill or coin (`1 DÓLAR`), writing carved
+     or painted on a thing, a title or logo, a poster, a chart's labels, a
+     sound effect drawn on the art, outlined or not, credits, a watermark, or
+     a box with no text. When in doubt, ask whether the text sits in a bubble
+     or a caption box: if not, delete it;
    - text no box holds: add an entry with a new `id`;
    - text written in columns, or a right-to-left target language: add
      `"direction": "vertical"` or `"rtl"`.
@@ -81,10 +87,11 @@ Progress:
    ```bash
    cd "<this skill's folder>" && uv run scripts/run.py render "<work folder>"
    ```
-   It checks every notes file, then translates each page from its original.
-   It refuses while any page still has an entry with no translation, and
-   names those pages: translate each entry, or delete it to leave its text
-   as it is.
+   It checks the notes of the pages it renders, then translates each page
+   from its original. Name pages after the work folder to render only those,
+   such as `render "<work folder>" 005 006 007`. It refuses while a page it
+   renders still has an entry with no translation, and names those pages:
+   translate each entry, or delete it to leave its text as it is.
    It refuses a translation holding a symbol the font cannot draw, such as
    `♪` or an emoji, and names the entry: write it in words or leave it out.
    Each page's `warnings` name a box now far from where detect found its
@@ -103,12 +110,15 @@ Progress:
    after you changed its entry twice: delete its entry, and say so in your
    answer.
 4. **Hand over**, in two steps:
-   - zip the translated pages in page order next to the input, named as it
-     with the target language's English name before its extension, as
-     `chapter.zip` translated to English becomes `chapter-english.zip`:
+   - pack the translated pages next to the input, named as it with the
+     target language's English name before its extension, as `chapter.zip`
+     translated to English becomes `chapter-english.zip`:
      ```bash
-     cd "<work folder>/translated" && python3 -m zipfile -c "<input's folder>/<input's name>-<language>.zip" *
+     cd "<this skill's folder>" && uv run scripts/run.py pack "<work folder>" "<input's folder>/<input's name>-<language>.zip"
      ```
+     It refuses while a page is untranslated, or its notes changed after it
+     was rendered, and names those pages: render them and check them, as in
+     step 3, before packing again.
    - send that zip to the person with your tool for giving them a file, then
      write your answer.
 
@@ -129,32 +139,37 @@ to 4. Otherwise:
   ```text
   The chapter has <pages> pages, so it is translated in <parts> parts.
   Start one worker for each line below, with the line as its whole task:
-  - Part: translate pages <first>-<last> of the chapter in <work folder> with the comic-translator skill.
+  - Part: translate and render pages <first>-<last> of the chapter in <work folder> with the comic-translator skill.
   - (one line for each part)
   When every part reports ready, start one worker with this task:
-  - Combine: render the chapter in <work folder> with the comic-translator skill, and hand over <input's folder>/<input's name>-<language>.zip.
+  - Combine: pack the chapter in <work folder> with the comic-translator skill, and hand over <input's folder>/<input's name>-<language>.zip.
   ```
 
 - Stop there. Those lines are for your bot, which starts each one as its
   own worker, so the person sees every part. Do not read a page yourself.
 
-**Part.** Do step 2, Read and edit, for the pages your task names and no
-others. Page names are the notes files' names, such as `012`.
+**Part.** Do step 2, Read and edit, then step 3, Render and check, for the
+pages your task names and no others. Page names are the notes files' names,
+such as `012`. Render only your pages, naming each of them after the work
+folder, and fix your own pages until each is clean: no one renders or checks
+them after you.
 
 Before each page, read `<work folder>/names.json`. It maps each name or term,
 as it reads in the original, to its translation. Translate every one it
 holds the way it says. When a page has a new name or term, read the file
 again, then add the new one and write it back. Other parts write to it too.
 
-When your pages are done, report `ready` with how many pages and entries
-you translated. Do not render.
+When your pages are rendered and clean, report `ready` with how many pages
+and entries you translated, and any text you could not get clean.
 
-**Combine.** Do step 3, Render and check, then step 4, Hand over. When
-render refuses because pages are untranslated, do not translate them
-yourself: report `blocked`, and name those pages.
+**Combine.** Do step 4, Hand over, only. Do not read, translate or render a
+page. When pack refuses, report `blocked` with the pages it names and why,
+so your bot sends them back to the part that has them.
 
 ## Gotchas
 
+- Renders in one work folder take turns: while another part renders, yours
+  waits, then runs.
 - Detect and render take minutes on a long chapter. When your shell says a
   command is still running, call it again with exactly the same command: that
   call waits, and the one that finishes hands back the JSON report. Do not
@@ -166,7 +181,7 @@ yourself: report `blocked`, and name those pages.
 - A sound inside a bubble is translated (`¡COF, COF!` is `COUGH, COUGH!`). A
   sound effect drawn on the art (`SHH SHH`, `PLOP`) is left alone by deleting
   its entry: an entry kept, even with the same text, is erased and lettered
-  again in plain type.
+  again in plain type, and erasing it damages the picture round it.
 - Read the text yourself from the `boxes` sheets. Do not install OCR or other
   packages to read it: they are large downloads, and the sheets are enlarged
   for reading.

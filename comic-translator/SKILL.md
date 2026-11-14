@@ -50,9 +50,9 @@ Progress:
    Running it again keeps notes already in the work folder.
 
    Then count the pages in `<work folder>/pages`. When your task names no
-   role and there are at least 3 pages for each worker your bot can run, you
-   are Prepare: go to [Long chapters](#long-chapters) now, and do not start
-   step 2.
+   role, the chapter has 2 pages or more, and your bot can run 2 workers or
+   more, you are Prepare: go to [Long chapters](#long-chapters) now, and do
+   not start step 2.
 2. **Read and edit**, one page at a time: the overview for where each box
    sits, then the page's `boxes` sheets to read the text. The number on a box
    is the entry with that `id` in the page's notes. Open a `review` stretch
@@ -137,10 +137,13 @@ a chapter is the first one.
 
 **Prepare.** Run step 1, Detect. Count the pages in `<work folder>/pages`.
 Your task says how many workers your bot can run at once. When it does not,
-take 3. With fewer than 3 pages for each worker, carry on alone with steps 2
-to 4. Otherwise:
+take 3. With one page, or a bot that runs one worker, carry on alone with
+steps 2 to 4: there is nothing to share. Otherwise, since reading a page
+takes minutes and a split costs about a minute:
 - Write `{}` to `<work folder>/names.json`.
-- Split the pages into that many runs of pages, in order, as even as they go.
+- Split the pages into as many parts as your bot can run workers, but no
+  more parts than pages, in order and as even as they go: 5 pages for 3
+  workers are 000-001, 002-003 and 004.
 - Call `ticket_report` with the state `ready` and this summary, every path
   in full and `<language>` the one the person asked for (English when they
   don't say), since each part sees only its own line:

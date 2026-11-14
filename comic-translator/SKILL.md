@@ -127,13 +127,10 @@ to 4. Otherwise:
   ```
 
 - Stop there. Those lines are for your bot, which starts each one as its
-  own worker, so the person sees every part. Do not read a page, and do not
-  start helpers with `run_subagent` to do the parts yourself.
+  own worker, so the person sees every part. Do not read a page yourself.
 
 **Part.** Do step 2, Read and edit, for the pages your task names and no
-others. Page names are the notes files' names, such as `012`. Read every
-page yourself: helpers started with `run_subagent` cannot view images, so
-handing them pages makes them slower, not faster.
+others. Page names are the notes files' names, such as `012`.
 
 Before each page, read `<work folder>/names.json`. It maps each name or term,
 as it reads in the original, to its translation. Translate every one it

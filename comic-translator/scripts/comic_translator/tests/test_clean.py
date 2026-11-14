@@ -79,3 +79,14 @@ def test_a_mark_beside_the_text_does_not_stop_even_paper_being_filled_flat() -> 
     done = erased(page, BOX, FlatGrey)
 
     assert done.getpixel((120, 120)) == (255, 255, 255)
+
+
+def test_a_border_running_past_the_box_does_not_make_an_accent_look_like_a_speck() -> None:
+    page = bubble("white")
+    pen = ImageDraw.Draw(page)
+    pen.rectangle((94, 0, 96, 300), fill="black")
+    pen.rectangle((112, 103, 116, 105), fill="black")
+
+    done = erased(page, BOX, FlatGrey)
+
+    assert np.asarray(done)[100:160, 100:300].min() == 255

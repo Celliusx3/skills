@@ -105,19 +105,24 @@ def pieces(mask: Mask) -> tuple[NDArray[np.int32], NDArray[np.float64]]:
     return labels, ndimage.sum_labels(mask, labels, np.arange(1, count + 1))
 
 
-def letter_height(labels: NDArray[np.int32]) -> int:
-    """The typical height of the tallest pieces, as a letter's; 1 when there are none."""
-    heights = [rows.stop - rows.start for rows, _ in ndimage.find_objects(labels) or []]
+def letter_height(labels: NDArray[np.int32], running_off: NDArray[np.int32]) -> int:
+    """The typical height of the tallest pieces not running off, as a letter's, while a border or
+    a figure running past the margin is none; 1 when there are none."""
+    heights = [
+        rows.stop - rows.start
+        for label, (rows, _) in enumerate(ndimage.find_objects(labels) or [], start=1)
+        if label not in running_off
+    ]
     if not heights:
         return 1
     tall = [h for h in heights if h >= LETTER_SHARE * max(heights)]
     return round(float(np.median(tall)))
 
 
-def without_specks(mask: Mask) -> Mask:
+def without_specks(mask: Mask, edge: Mask) -> Mask:
     """`mask` without pieces tiny beside one of its letters, as noise is; accents and dots stay."""
     labels, sizes = pieces(mask)
-    least = SPECK_SHARE * letter_height(labels) ** 2
+    least = SPECK_SHARE * letter_height(labels, np.unique(labels[edge & mask])) ** 2
     return np.isin(labels, np.flatnonzero(sizes >= least) + 1) if sizes.size else mask
 
 
@@ -158,10 +163,11 @@ def text_in(pixels: Pixels, box_mask: Mask, line_height: int, near: Mask | None 
     `¡` a box misses."""
     reach = max(RING, round(REACH * line_height))
     margin = ndimage.binary_dilation(box_mask, iterations=reach)
-    far = without_specks(margin & ~paper_in(pixels, margin, box_mask, near))
+    edge = margin & ~ndimage.binary_erosion(margin)
+    far = without_specks(margin & ~paper_in(pixels, margin, box_mask, near), edge)
     labels, sizes = pieces(far)
     small = np.flatnonzero(sizes <= SMALL_PIECE * box_mask.sum()) + 1
-    reaching_out = np.unique(labels[margin & ~ndimage.binary_erosion(margin)])
+    reaching_out = np.unique(labels[edge])
     return (far & box_mask) | np.isin(labels, np.setdiff1d(small, reaching_out))
 
 

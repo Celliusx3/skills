@@ -37,6 +37,7 @@ from comic_translator.notes import (
     NotesError,
     moved,
     read_notes,
+    undrawable,
     untranslated_pages,
     write_notes,
 )
@@ -80,6 +81,7 @@ UNTRANSLATED = (
     "pages {pages} still have entries with no translation: translate each one, or delete it to "
     "leave its text as it is"
 )
+UNDRAWN = "page {found}, which the lettering font cannot draw: write it in words or leave it out"
 JPEG_QUALITY = 90
 
 
@@ -187,6 +189,15 @@ def warnings_of(path: Path, work: Path, entries: list[Entry], size: tuple[int, i
     ]
 
 
+def left_alone(path: Path, work: Path, entries: list[Entry], size: tuple[int, int]) -> list[int]:
+    """The ids of the text detect found on the page that the notes no longer hold."""
+    copy = work / "detected" / f"{path.stem}.json"
+    if not copy.is_file():
+        return []
+    kept = {entry.id for entry in entries}
+    return [found.id for found in read_notes(copy, size) if found.id not in kept]
+
+
 def rendered_page(path: Path, work: Path, inpainter: Inpainter) -> dict[str, object]:
     """One page translated from its checked notes, with its images redrawn to look at."""
     page = page_image(path)
@@ -204,6 +215,7 @@ def rendered_page(path: Path, work: Path, inpainter: Inpainter) -> dict[str, obj
         "translated": output.name,
         "result-boxes": len(sheets(done, entries, work / "result-boxes", path.stem)),
         "warnings": warnings_of(path, work, entries, page.size),
+        "left as it is": left_alone(path, work, entries, page.size),
     }
 
 
@@ -249,6 +261,16 @@ def chosen(pages: Sequence[Path], names: Sequence[str]) -> list[Path]:
     return [held[name] for name in sorted(set(names))]
 
 
+def ready(notes: dict[str, list[Entry]]) -> None:
+    """`DetectError` while an entry is untranslated or holds a symbol the font cannot draw."""
+    missing = untranslated_pages(notes)
+    if missing:
+        raise DetectError(UNTRANSLATED.format(pages=", ".join(missing)))
+    symbols = undrawable(notes)
+    if symbols:
+        raise DetectError(UNDRAWN.format(found="; page ".join(symbols)))
+
+
 def render(work: Path, names: Sequence[str]) -> dict[str, object]:
     """The named pages of the work folder, or every page, translated from their notes."""
     pages = sorted(p for p in (work / "pages").iterdir() if p.is_file())
@@ -257,9 +279,7 @@ def render(work: Path, names: Sequence[str]) -> dict[str, object]:
     notes = {
         p.stem: read_notes(work / "notes" / f"{p.stem}.json", page_image(p).size) for p in pages
     }
-    missing = untranslated_pages(notes)
-    if missing:
-        raise DetectError(UNTRANSLATED.format(pages=", ".join(missing)))
+    ready(notes)
     redo = chosen(pages, names)
     inpainter = Inpainter()
     with alone(work):

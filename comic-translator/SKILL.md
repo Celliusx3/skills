@@ -85,8 +85,15 @@ Progress:
    It refuses while any page still has an entry with no translation, and
    names those pages: translate each entry, or delete it to leave its text
    as it is.
+   It refuses a translation holding a symbol the font cannot draw, such as
+   `♪` or an emoji, and names the entry: write it in words or leave it out.
    Each page's `warnings` name a box now far from where detect found its
-   text, with the box detect found: fix those first. Then look at the
+   text, with the box detect found: fix those first. Each page's
+   `left as it is` lists the ids of text detect found whose entry was
+   deleted. Find each by its box in `detected/<page>.json` on the ruled
+   `review` images: one in a speech bubble or a caption, however short
+   (`¡FUERON TIEMPOS LOCOS!`, `EE, ESTÁ BIEN.`), was deleted by mistake, so
+   copy its entry back into the notes, translate it, and render that page. Then look at the
    `result-boxes/<page>-<n>.jpg` sheets, each box cut from the translated
    page (a `result` stretch for a closer look). Where text is left over, a
    box reached onto the art, or a translation reads badly, edit the notes and

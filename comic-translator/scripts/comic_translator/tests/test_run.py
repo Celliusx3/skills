@@ -82,7 +82,13 @@ def test_render_translates_the_page_from_the_edited_notes(detected: dict) -> Non
 
     assert code == 0
     assert result["pages"] == [
-        {"page": "001", "translated": "001.png", "result-boxes": 1, "warnings": []}
+        {
+            "page": "001",
+            "translated": "001.png",
+            "result-boxes": 1,
+            "warnings": [],
+            "left as it is": [2],
+        }
     ]
     assert (work / "translated" / "001.png").is_file()
     assert (work / "result-boxes" / "001-1.jpg").is_file()
@@ -216,3 +222,28 @@ def test_help_says_render_can_redo_named_pages() -> None:
 
     assert code == 0
     assert "render <work folder> [page ...]" in text
+
+
+def test_render_refuses_a_symbol_the_lettering_font_cannot_draw(detected: dict) -> None:
+    entries = json.loads(notes_of(detected).read_text())
+    sung = [{**entries[0], "translation": "♪ Hello ♪"}, {**entries[1], "translation": "hi"}]
+    notes_of(detected).write_text(json.dumps(sung))
+
+    code, text = called(["render", detected["work"]])
+
+    assert code == 1
+    assert text == (
+        "error: page 001 #1 has ♪, which the lettering font cannot draw: write it in words "
+        "or leave it out"
+    )
+    assert not (Path(detected["work"]) / "translated").exists()
+
+
+def test_render_names_the_text_left_as_it_is(detected: dict) -> None:
+    entries = json.loads(notes_of(detected).read_text())
+    notes_of(detected).write_text(json.dumps([{**entries[0], "translation": "hi"}]))
+
+    code, result = called(["render", detected["work"]])
+
+    assert code == 0
+    assert result["pages"][0]["left as it is"] == [2]

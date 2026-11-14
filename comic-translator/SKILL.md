@@ -131,7 +131,9 @@ to 4. Otherwise:
   start helpers with `run_subagent` to do the parts yourself.
 
 **Part.** Do step 2, Read and edit, for the pages your task names and no
-others. Page names are the notes files' names, such as `012`.
+others. Page names are the notes files' names, such as `012`. Read every
+page yourself: helpers started with `run_subagent` cannot view images, so
+handing them pages makes them slower, not faster.
 
 Before each page, read `<work folder>/names.json`. It maps each name or term,
 as it reads in the original, to its translation. Translate every one it

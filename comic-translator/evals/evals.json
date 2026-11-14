@@ -44,5 +44,66 @@
       "Renders again after any edit, and stops once the page is clean",
       "When a command is still running, waits by sending the identical command, never a changed one"
     ]
+  },
+  {
+    "skills": ["comic-translator"],
+    "query": "Translate this comic into English with the comic-translator skill. Your bot can run 3 workers at once.",
+    "files": [
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P01.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P02.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P03.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P01.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P02.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P03.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P01.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P02.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P03.jpg"
+    ],
+    "files_as": "one .zip of the twelve pages, in this order",
+    "expected_behavior": [
+      "Acts as Prepare: runs detect, then stops before reading any page",
+      "Writes {} to names.json in the work folder",
+      "Reports ready with 'The chapter has 12 pages, so it is translated in 3 parts.'",
+      "Lists three Part task lines for pages 000-003, 004-007 and 008-011, each with the work folder's full path",
+      "Lists one Combine task line that names the work folder and hands over <input>-english.zip next to the input"
+    ]
+  },
+  {
+    "skills": ["comic-translator"],
+    "query": "Part: translate pages 000-001 of the chapter in <work folder> with the comic-translator skill.",
+    "files": [
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P01.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P02.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P03.jpg"
+    ],
+    "files_as": "a work folder made by detect from one .zip of the four pages, holding names.json with {\"Pepper\": \"Pepper\"}",
+    "expected_behavior": [
+      "Reads and edits the notes of pages 000 and 001 only, and leaves 002 and 003 untouched",
+      "Reads names.json before each page and keeps 'Pepper' as it is",
+      "Adds any new name it meets, such as 'Carrot', to names.json without dropping 'Pepper'",
+      "Does not run render",
+      "Reports ready with how many pages and entries it translated"
+    ]
+  },
+  {
+    "skills": ["comic-translator"],
+    "query": "Combine: render the chapter in <work folder> with the comic-translator skill, and hand over <input's folder>/chapter-english.zip.",
+    "files": [
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P01.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P02.jpg",
+      "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P03.jpg"
+    ],
+    "files_as": "a work folder made by detect from one .zip of the four pages, with pages 000 and 001 translated and 002 and 003 as detect left them",
+    "expected_behavior": [
+      "Runs render, which refuses and names pages 002 and 003",
+      "Does not translate pages 002 or 003 itself",
+      "Reports blocked and names pages 002 and 003",
+      "Hands over no zip"
+    ]
   }
 ]

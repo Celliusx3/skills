@@ -25,6 +25,9 @@ below write `~/.local/bin/uv` where it says `uv`.
 
 ## Workflow
 
+A chapter with many pages can be split across several workers: see
+[Long chapters](#long-chapters) before you start one.
+
 Progress:
 - [ ] 1. Detect
 - [ ] 2. Read and edit the notes, one page at a time
@@ -74,6 +77,9 @@ Progress:
    cd "<this skill's folder>" && uv run scripts/run.py render "<work folder>"
    ```
    It checks every notes file, then translates each page from its original.
+   It refuses while any page still has an entry with no translation, and
+   names those pages: translate each entry, or delete it to leave its text
+   as it is.
    Each page's `warnings` name a box now far from where detect found its
    text, with the box detect found: fix those first. Then look at the
    `result-boxes/<page>-<n>.jpg` sheets, each box cut from the translated
@@ -91,6 +97,44 @@ Progress:
      ```
    - send that zip to the person with your tool for giving them a file, then
      write your answer.
+
+## Long chapters
+
+Your task says which of these you are. A task that names no role and gives
+a chapter is the first one.
+
+**Prepare.** Run step 1, Detect. Count the pages in `<work folder>/pages`.
+Your task says how many workers your bot can run at once. When it does not,
+take 3. With fewer than 3 pages for each worker, carry on alone with steps 2
+to 4. Otherwise:
+- Write `{}` to `<work folder>/names.json`.
+- Split the pages into that many runs of pages, in order, as even as they go.
+- Call `ticket_report` with the state `ready` and this summary, every path
+  in full:
+
+  ```text
+  The chapter has <pages> pages, so it is translated in <parts> parts.
+  Start one worker for each line below, with the line as its whole task:
+  - Part: translate pages <first>-<last> of the chapter in <work folder> with the comic-translator skill.
+  - (one line for each part)
+  When every part reports ready, start one worker with this task:
+  - Combine: render the chapter in <work folder> with the comic-translator skill, and hand over <input's folder>/<input's name>-<language>.zip.
+  ```
+
+**Part.** Do step 2, Read and edit, for the pages your task names and no
+others. Page names are the notes files' names, such as `012`.
+
+Before each page, read `<work folder>/names.json`. It maps each name or term,
+as it reads in the original, to its translation. Translate every one it
+holds the way it says. When a page has a new name or term, read the file
+again, then add the new one and write it back. Other parts write to it too.
+
+When your pages are done, report `ready` with how many pages and entries
+you translated. Do not render.
+
+**Combine.** Do step 3, Render and check, then step 4, Hand over. When
+render refuses because pages are untranslated, do not translate them
+yourself: report `blocked`, and name those pages.
 
 ## Gotchas
 

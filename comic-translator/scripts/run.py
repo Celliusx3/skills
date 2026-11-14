@@ -141,14 +141,18 @@ class Inpainter:
 def translated(
     page: Image.Image, entries: list[Entry], inpainter: Inpainter, likely: Image.Image | None
 ) -> Image.Image:
-    """A copy of `page` with every entry's text erased, and its translation lettered if any;
-    each step pastes only the piece it changed, so a tall page is never copied per entry."""
+    """A copy of `page` with every entry's text erased, then its translation lettered if any,
+    clear of the other boxes; each step pastes only the piece it changed, so a tall page is never
+    copied per entry."""
     done = page.copy()
     for entry in entries:
         patch = erased(done, entry.box, inpainter, likely)
         done.paste(patch.image, patch.at)
+    for entry in entries:
         if entry.translation.strip():
-            done.paste(lettered(done, entry.box, entry.translation), entry.box.corners()[:2])
+            others = [other.box for other in entries if other is not entry]
+            patch = lettered(done, page, entry.box, entry.translation, others)
+            done.paste(patch.image, patch.at)
     return done
 
 

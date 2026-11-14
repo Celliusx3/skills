@@ -138,10 +138,10 @@ to 4. Otherwise:
 
   ```text
   The chapter has <pages> pages, so it is translated in <parts> parts.
-  Start one worker for each line below, with the line as its whole task:
+  Start now one worker for each line below, with the line as its whole task:
   - Part: translate and render pages <first>-<last> of the chapter in <work folder> with the comic-translator skill.
   - (one line for each part)
-  When every part reports ready, start one worker with this task:
+  Only after every one of those reports ready, start one worker with this task:
   - Combine: pack the chapter in <work folder> with the comic-translator skill, and hand over <input's folder>/<input's name>-<language>.zip.
   ```
 
@@ -164,7 +164,7 @@ and entries you translated, and any text you could not get clean.
 
 **Combine.** Do step 4, Hand over, only. Do not read, translate or render a
 page. When pack refuses, report `blocked` with the pages it names and why,
-so your bot sends them back to the part that has them.
+and which part's task names them, so your bot sends them back to that part.
 
 ## Gotchas
 

@@ -126,6 +126,13 @@ def without_specks(mask: Mask, edge: Mask) -> Mask:
     return np.isin(labels, np.flatnonzero(sizes >= least) + 1) if sizes.size else mask
 
 
+def between(mask: Mask, axis: int) -> Mask:
+    """Every point with some of `mask` on both sides of it along `axis`."""
+    before = np.maximum.accumulate(mask, axis=axis)
+    after = np.flip(np.maximum.accumulate(np.flip(mask, axis), axis=axis), axis)
+    return before & after
+
+
 def near_text(likely: NDArray[np.uint8], box_mask: Mask) -> Mask:
     """Where the text finder saw text in the box, grown by the band's own thickness to take in
     whole letters; everywhere when it saw none there, as in a box the model added."""
@@ -134,6 +141,12 @@ def near_text(likely: NDArray[np.uint8], box_mask: Mask) -> Mask:
         return np.ones_like(box_mask)
     thickness = 2 * float(ndimage.distance_transform_edt(band).max())
     return ndimage.distance_transform_edt(~band) <= thickness
+
+
+def spanned(near: Mask, box_mask: Mask) -> Mask:
+    """`near`, and what lies between its lines in the box, down and then across, where the
+    translation will run over an outline between two bubbles the box takes in."""
+    return near | (between(between(near & box_mask, 0), 1) & box_mask)
 
 
 def kept_near(text: Mask, allowed: Mask, box_mask: Mask) -> Mask:
@@ -237,7 +250,7 @@ def erased(
         near = near_text(np.asarray(likely.crop(corners)), box_mask)
     text = text_in(pixels, box_mask, height, near)
     if near is not None:
-        text = kept_near(text, near, box_mask)
+        text = kept_near(text, spanned(near, box_mask), box_mask)
     pad = pad_of(text)
     hole = ndimage.binary_dilation(text, iterations=pad) & ndimage.binary_dilation(
         box_mask | text, iterations=RING

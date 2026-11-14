@@ -90,3 +90,19 @@ def test_a_border_running_past_the_box_does_not_make_an_accent_look_like_a_speck
     done = erased(page, BOX, FlatGrey)
 
     assert np.asarray(done)[100:160, 100:300].min() == 255
+
+
+def test_a_mark_between_two_bubbles_lines_in_one_box_is_erased_with_them() -> None:
+    page = Image.new("RGB", (400, 300), "white")
+    likely = Image.new("L", (400, 300), 0)
+    pen, seen = ImageDraw.Draw(page), ImageDraw.Draw(likely)
+    for top in (110, 175):
+        for x in range(110, 270, 30):
+            pen.rectangle((x, top, x + 18, top + 15), fill="black")
+        seen.rectangle((110, top + 6, 288, top + 9), fill=255)
+    pen.rectangle((112, 140, 286, 159), fill="black")
+
+    patch = erased_patch(page, Box(100, 100, 300, 200), FlatGrey, likely)
+    page.paste(patch.image, patch.at)
+
+    assert np.asarray(page)[100:200, 100:300].min() == 255

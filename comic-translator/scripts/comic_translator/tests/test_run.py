@@ -384,6 +384,17 @@ def test_pack_refuses_a_page_whose_notes_are_missing_naming_it(
     assert not (tmp_path / "c.zip").exists()
 
 
+def test_render_refuses_a_page_rendered_three_times_already(detected: dict) -> None:
+    translate_every_entry(detected["work"])
+    for _ in range(3):
+        assert called(["render", detected["work"], "001"])[0] == 0
+
+    code, text = called(["render", detected["work"], "001"])
+
+    assert code == 1
+    assert text.startswith("error: pages 001 were rendered 3 times already")
+
+
 def test_pack_refuses_a_chapter_with_an_untranslated_entry(detected: dict, tmp_path: Path) -> None:
     rendered_chapter(detected)
     entries = json.loads(notes_of(detected).read_text())

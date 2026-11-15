@@ -53,6 +53,7 @@ from comic_translator.notes import (
 )
 from comic_translator.review import overview, review_images
 from comic_translator.sheets import box_sheets
+from comic_translator.tries import count_render, refuse_spent
 from comic_translator.turns import turn_of
 
 USAGE = (
@@ -320,10 +321,18 @@ def render(work: Path, names: Sequence[str]) -> dict[str, object]:
     """The named pages of the work folder, or every page, translated from their notes."""
     redo = chosen(pages_of(work), names)
     ready(notes_of(work, redo))
+    refuse_spent(work, [p.stem for p in redo])
     inpainter = Inpainter()
     with turn_of(work, [p.stem for p in redo]):
-        done = [rendered_page(p, work, inpainter) for p in redo]
+        done = [counted_render(p, work, inpainter) for p in redo]
     return {"work": str(work), "files": RENDER_FILES, "pages": done}
+
+
+def counted_render(path: Path, work: Path, inpainter: Inpainter) -> dict[str, object]:
+    """`path` rendered, with one more render noted against it."""
+    done = rendered_page(path, work, inpainter)
+    count_render(work, path.stem)
+    return done
 
 
 def unrendered(work: Path, pages: Sequence[Path]) -> list[str]:

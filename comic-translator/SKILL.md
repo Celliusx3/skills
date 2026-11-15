@@ -142,44 +142,39 @@ Progress:
 Your task says which of these you are. A task that names no role and gives
 a chapter is the first one.
 
-**Prepare.** Run step 1, Detect. Count the pages in `<work folder>/pages`.
-Your task says how many workers your bot can run at once. When it does not,
-take 3. With one page, or a bot that runs one worker, carry on alone with
-steps 2 to 4: there is nothing to share. Otherwise, since reading a page
-takes minutes and a split costs about a minute:
-- Write `{}` to `<work folder>/names.json`.
-- Split the pages into as many parts as your bot can run workers, but no
-  more parts than pages, in order and as even as they go: 5 pages for 3
-  workers are 000-001, 002-003 and 004.
-- Call `ticket_report` with the state `ready` and this summary, every path
-  in full and `<language>` the one the person asked for (English when they
-  don't say), since each part sees only its own line:
+**Prepare.** Run step 1, Detect. Your task says how many workers your bot
+can run at once; when it does not, take 3. With one page, or a bot that runs
+one worker, carry on alone with steps 2 to 4: there is nothing to share.
+Otherwise, with `<language>` the one the person asked for (English when they
+don't say), run each command below from this skill's folder, in order:
+1. `uv run scripts/run.py names-programs "<work folder>" <language>`. Pass
+   each program in its `programs` to `execute_typescript` exactly as printed,
+   one after another. Each asks `ask_about_images` for the chapter's names.
+2. `uv run scripts/run.py names "<work folder>"`. It writes those names to
+   `names.json`, which every part reads.
+3. `uv run scripts/run.py parts "<work folder>" <workers> <language> "<input's folder>/<input's name>-<language>.zip"`.
+   Call `ticket_report` with the state `ready` and its `summary` as the
+   summary, exactly as printed.
 
-  ```text
-  The chapter has <pages> pages, so it is translated in <parts> parts.
-  Start now one ticket for each line below with ticket_route, the line as its whole task:
-  - Part: translate pages <first>-<last> of the chapter in <work folder> into <language> and render them, with the comic-translator skill.
-  - (one line for each part)
-  Only after every one of those reports ready, start one ticket with ticket_route for this task:
-  - Combine: pack the chapter in <work folder> with the comic-translator skill, and hand over <input's folder>/<input's name>-<language>.zip.
-  ```
+Stop there. Those lines are for your bot, which starts each one as its own
+ticket, so the person sees every part. Do not read a page yourself.
 
-- Stop there. Those lines are for your bot, which starts each one as its
-  own ticket, so the person sees every part. Do not read a page yourself.
+**Part.** Your task names your pages one by one and the language. Do only
+these pages, from this skill's folder:
+1. `uv run scripts/run.py programs "<work folder>" <language> <your pages>`.
+   Pass each program in its `programs` to `execute_typescript` exactly as
+   printed, one after another. Each program translates its pages, one
+   `ask_about_images` call per page, and saves each answer.
+2. `uv run scripts/run.py apply "<work folder>" <your pages>`. It writes the
+   answers into the notes and lists in `flagged` the pages to look at again.
+3. `render "<work folder>" <your pages>`, as in step 3.
+4. Look again only at the pages in `flagged`, and at pages whose `warnings`
+   or `left as it is` render reports. For each, open its `boxes` sheets and
+   its `result-boxes` sheets, fix its notes as step 2 says, and render it
+   again. Every other page is done.
 
-**Part.** Do step 2, Read and edit, into the language your task names, then
-step 3, Render and check, for the pages your task names and no others. Page names are the notes files' names,
-such as `012`. Render only your pages, naming each of them after the work
-folder, and fix your own pages until each is clean: no one renders or checks
-them after you.
-
-Before each page, read `<work folder>/names.json`. It maps each name or term,
-as it reads in the original, to its translation. Translate every one it
-holds the way it says. When a page has a new name or term, read the file
-again, then add the new one and write it back. Other parts write to it too.
-
-When your pages are rendered and clean, report `ready` with how many pages
-and entries you translated, and any text you could not get clean.
+When your pages are rendered, report `ready` with how many pages you
+translated, and the pages you looked at again and why.
 
 **Combine.** Do step 4, Hand over, only. Do not read, translate or render a
 page. When pack refuses, report `blocked` with the pages it names and why,

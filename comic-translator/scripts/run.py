@@ -22,6 +22,8 @@ from typing import TextIO
 import numpy as np
 from PIL import Image
 
+from comic_translator.answers import applied
+from comic_translator.batch import merged_names, names_programs, page_programs, parts_summary
 from comic_translator.bubbles import by_paragraph
 from comic_translator.clean import erased
 from comic_translator.detect import (
@@ -61,7 +63,10 @@ from comic_translator.turns import turn_of
 
 USAGE = (
     "usage: run.py detect <image or archive> | run.py render <work folder> [page ...]"
-    " | run.py pack <work folder> <archive> | run.py --help"
+    " | run.py pack <work folder> <archive> | run.py parts <work folder> <workers> <language>"
+    " <archive> | run.py names-programs <work folder> <language> | run.py names <work folder>"
+    " | run.py programs <work folder> <language> <page ...> | run.py apply <work folder>"
+    " <page ...> | run.py --help"
 )
 HELP = """usage: uv run scripts/run.py COMMAND ARGUMENT
 
@@ -79,6 +84,19 @@ commands:
   pack <work folder> <archive>  put every translated page, in page order, into a new .zip or
                                 .cbz; refused while a page is untranslated, or its notes
                                 changed after it was rendered
+  parts <work folder> <workers> <language> <archive>
+                                the report that splits the pages with text into one part per
+                                worker, naming each part's pages, and the Combine line
+  names-programs <work folder> <language>
+                                a program for execute_typescript whose calls list the chapter's
+                                names from its box sheets
+  names <work folder>           add the names those calls saved to names.json
+  programs <work folder> <language> <page ...>
+                                programs for execute_typescript, each page one call that saves
+                                its answer to drafts/<page>.json
+  apply <work folder> <page ...>
+                                write each page's saved answer into its notes, and name the
+                                pages that need a closer look
 
 Each prints one JSON object, or one line starting "error:" saying what to fix.
 
@@ -430,6 +448,31 @@ def command(argv: Sequence[str]) -> dict[str, object]:
             if not (work / "pages").is_dir():
                 raise DetectError(f"{folder} is not a work folder from detect")
             return pack(work, Path(archive).expanduser().resolve())
+        case _:
+            return batch_command(argv)
+
+
+def work_folder(folder: str) -> Path:
+    """`folder` as a work folder detect made; refused when it is not one."""
+    work = Path(folder).expanduser().resolve()
+    if not (work / "pages").is_dir():
+        raise DetectError(f"{folder} is not a work folder from detect")
+    return work
+
+
+def batch_command(argv: Sequence[str]) -> dict[str, object]:
+    """The commands that hand a chapter's pages to the model one call per page."""
+    match list(argv):
+        case ["parts", folder, workers, language, archive] if workers.isdigit():
+            return {"summary": parts_summary(work_folder(folder), int(workers), language, archive)}
+        case ["names-programs", folder, language]:
+            return {"programs": names_programs(work_folder(folder), language)}
+        case ["names", folder]:
+            return {"names": merged_names(work_folder(folder))}
+        case ["programs", folder, language, *pages] if pages:
+            return {"programs": page_programs(work_folder(folder), language, pages)}
+        case ["apply", folder, *pages] if pages:
+            return dict(applied(work_folder(folder), pages))
         case _:
             raise DetectError(USAGE)
 

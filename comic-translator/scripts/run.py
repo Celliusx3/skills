@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import sys
 import zipfile
@@ -53,6 +54,7 @@ from comic_translator.notes import (
 )
 from comic_translator.review import overview, review_images
 from comic_translator.sheets import box_sheets
+from comic_translator.strip import LAYOUT, cut_back, laid_out
 from comic_translator.tries import count_render, refuse_spent, renders_so_far, spent
 from comic_translator.turns import turn_of
 
@@ -141,7 +143,7 @@ def detected_page(session: Session, path: Path, work: Path) -> dict[str, object]
 def detect(source: Path, session: Session) -> dict[str, object]:
     """Every page of `source` unpacked into its work folder, with its notes and images to read."""
     work = work_of(source)
-    pages = unpacked(source, work / "pages")
+    pages = laid_out(work, unpacked(source, work / "source"))
     found = [detected_page(session, p, work) for p in pages]
     with_text = [page["page"] for page in found if page["entries"]]
     return {"work": str(work), "files": DETECT_FILES, "pages": found, "text_pages": with_text}
@@ -360,11 +362,28 @@ def pack(work: Path, archive: Path) -> dict[str, object]:
     stale = unrendered(work, [p for p in pages if p.stem in lettered_pages - final])
     if stale:
         raise DetectError(UNRENDERED.format(pages=", ".join(stale)))
+    chosen = [work / "translated" / p.name if p.stem in lettered_pages else p for p in pages]
+    if (work / LAYOUT).is_file():
+        return packed_strips(work, chosen, archive)
     with zipfile.ZipFile(archive, "w") as packed:
         for p in pages:
             source = work / "translated" / p.name if p.stem in lettered_pages else p
             packed.write(source, p.name)
     return {"archive": str(archive), "pages": len(pages)}
+
+
+def packed_strips(work: Path, chosen: Sequence[Path], archive: Path) -> dict[str, object]:
+    """The chapter cut back into its original strips, by their names, in a new archive."""
+    strips = cut_back(work, chosen)
+    with zipfile.ZipFile(archive, "w") as packed:
+        for name, image in strips:
+            encoded = io.BytesIO()
+            kind = "JPEG" if Path(name).suffix.lower() in (".jpg", ".jpeg") else "PNG"
+            image.save(
+                encoded, format=kind, **({"quality": JPEG_QUALITY} if kind == "JPEG" else {})
+            )
+            packed.writestr(name, encoded.getvalue())
+    return {"archive": str(archive), "pages": len(strips)}
 
 
 def command(argv: Sequence[str]) -> dict[str, object]:

@@ -135,6 +135,11 @@ def untranslated_pages(notes: Mapping[str, Sequence[Entry]]) -> list[str]:
     ]
 
 
+def text_pages(notes: Mapping[str, Sequence[Entry]]) -> list[str]:
+    """The pages, in order, that hold at least one entry."""
+    return [page for page, entries in notes.items() if entries]
+
+
 def undrawable(notes: Mapping[str, Sequence[Entry]]) -> list[str]:
     """Each entry, as `<page> #<id> has <symbol>`, whose translation holds a symbol, emoji or
     unassigned character that the lettering font cannot draw."""

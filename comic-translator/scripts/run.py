@@ -45,6 +45,7 @@ from comic_translator.notes import (
     NotesError,
     moved,
     read_notes,
+    text_pages,
     undrawable,
     untranslated_pages,
     write_notes,
@@ -140,7 +141,8 @@ def detect(source: Path, session: Session) -> dict[str, object]:
     work = work_of(source)
     pages = unpacked(source, work / "pages")
     found = [detected_page(session, p, work) for p in pages]
-    return {"work": str(work), "files": DETECT_FILES, "pages": found}
+    with_text = [page["page"] for page in found if page["entries"]]
+    return {"work": str(work), "files": DETECT_FILES, "pages": found, "text_pages": with_text}
 
 
 def page_image(path: Path) -> Image.Image:
@@ -333,18 +335,22 @@ def unrendered(work: Path, pages: Sequence[Path]) -> list[str]:
 
 
 def pack(work: Path, archive: Path) -> dict[str, object]:
-    """Every translated page, in page order, in a new archive; refused while any page is
-    untranslated or not rendered since its notes changed."""
+    """Every page, in page order, in a new archive: translated where it has entries, as it is
+    where it has none; refused while any page is untranslated or not rendered since its notes
+    changed."""
     if archive.suffix.lower() not in (".zip", ".cbz"):
         raise DetectError(f"{archive} must end in .zip or .cbz")
     pages = pages_of(work)
-    ready(notes_of(work, pages))
-    stale = unrendered(work, pages)
+    notes = notes_of(work, pages)
+    ready(notes)
+    lettered_pages = set(text_pages(notes))
+    stale = unrendered(work, [p for p in pages if p.stem in lettered_pages])
     if stale:
         raise DetectError(UNRENDERED.format(pages=", ".join(stale)))
     with zipfile.ZipFile(archive, "w") as packed:
         for p in pages:
-            packed.write(work / "translated" / p.name, p.name)
+            source = work / "translated" / p.name if p.stem in lettered_pages else p
+            packed.write(source, p.name)
     return {"archive": str(archive), "pages": len(pages)}
 
 

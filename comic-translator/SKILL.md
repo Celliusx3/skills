@@ -41,9 +41,11 @@ Progress:
    It makes a work folder beside the input holding, for each page:
    - `notes/<page>.json`: the entries to edit, one per piece of text found;
    - `overview/<page>.jpg`: the whole page small, every entry in a numbered
-     red box;
-   - `boxes/<page>-<n>.jpg`: each entry's box cut out, with a little of what
-     is round it, enlarged and numbered;
+     red box. Its text is too small to read;
+   - `boxes/<page>-<n>.jpg`: the page's sheets of boxes, starting at `-1`.
+     One sheet holds several entries, each box cut out with a little of what
+     is round it, enlarged and numbered with its entry's `id`. List the
+     `boxes` folder to see how many sheets a page has;
    - `review/<page>-<n>.jpg`: the page in full-size stretches, with a ruler
      along the top and left whose numbers are page pixels, as the boxes are.
 
@@ -58,7 +60,9 @@ Progress:
    is the entry with that `id` in the page's notes. Open a `review` stretch
    only for a closer look round a box, or to find text no box holds. Finish a
    page's notes before opening the next page's images. In each entry:
-   - `original`: the text in the box exactly as it reads;
+   - `original`: the text in the box exactly as it reads on the `boxes`
+     sheet. Never write it from the overview: its text is too small to read,
+     and what you write from it is a guess;
    - `translation`: it in the language the person asked for (English when
      they don't say), punctuated as that language does;
    - keep the entry only for text inside a speech bubble, a thought bubble or

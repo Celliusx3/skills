@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import unicodedata
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 EDGES = ("left", "top", "right", "bottom")
 DIRECTIONS = ("horizontal", "vertical", "rtl")
 SAME_PLACE = 0.4
+UNDRAWABLE = ("So", "Co", "Cn")
 
 
 class NotesError(ValueError):
@@ -123,3 +126,22 @@ def write_notes(path: Path, entries: list[Entry]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps([written(entry) for entry in entries], indent=1, ensure_ascii=False))
     return path
+
+
+def untranslated_pages(notes: Mapping[str, Sequence[Entry]]) -> list[str]:
+    """The pages, in order, that still hold an entry with no translation."""
+    return [
+        page for page, entries in notes.items() if any(not e.translation.strip() for e in entries)
+    ]
+
+
+def undrawable(notes: Mapping[str, Sequence[Entry]]) -> list[str]:
+    """Each entry, as `<page> #<id> has <symbol>`, whose translation holds a symbol, emoji or
+    unassigned character that the lettering font cannot draw."""
+    return [
+        f"{page} #{entry.id} has {symbol}"
+        for page, entries in notes.items()
+        for entry in entries
+        for symbol in dict.fromkeys(entry.translation)
+        if unicodedata.category(symbol) in UNDRAWABLE
+    ]

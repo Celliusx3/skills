@@ -19,18 +19,22 @@ KINDS = 8
 PAPER_SHARE = 0.25
 MOST = 0.5
 AWAY_LEAST = 0.02
+BEHIND_LEAST = 0.02
 TEXT_LIKELY = 77
 NEAR = 40
 SPECK_SHARE = 0.01
 LETTER_SHARE = 0.5
 PAD_SHARE = 0.15
-EVEN_EDGE = 15.0
+EVEN_SHARE = 0.85
 GHOST = 90
 GHOST_REACH = 2
 SMALL_PIECE = 0.1
 REACH = 0.15
 AWAY = 12
 MARGIN = 2.0
+SEEN_GROW = 2
+INK = 128
+TALL = 3
 SIDE = 512
 
 Mask = NDArray[np.bool_]
@@ -71,13 +75,21 @@ def paper_colours(
     pixels: Pixels, box_mask: Mask, near: Mask | None = None
 ) -> list[NDArray[np.int16]]:
     """What the box's text is printed on: where the text finder saw text, the colours covering
-    PAPER_SHARE of the strip just past it in the box, as a burst behind the letters is, while a
-    panel further off is not; else the colours covering PAPER_SHARE of the box's inner edge,
-    and any covering MOST of the whole box, as a bubble does when the box reaches past it."""
+    PAPER_SHARE of the strip just past it in the box and found behind the letters too, as a
+    burst's is, while a panel the box reaches onto past a short last line is not; else the
+    colours covering PAPER_SHARE of the box's inner edge, and any covering MOST of the whole
+    box, as a bubble does when the box reaches past it."""
     if near is not None:
         strip = ndimage.binary_dilation(near, iterations=AWAY) & ~near & box_mask
         if strip.sum() >= AWAY_LEAST * box_mask.sum():
-            return shares_of(pixels[strip], PAPER_SHARE)
+            band = pixels[near & box_mask]
+            behind = [
+                colour
+                for colour in shares_of(pixels[strip], PAPER_SHARE)
+                if float((distance(band, colour) <= NEAR).mean()) >= BEHIND_LEAST
+            ]
+            if behind:
+                return behind
     rim = box_mask & ~ndimage.binary_erosion(box_mask, iterations=RIM)
     return [*shares_of(pixels[rim], PAPER_SHARE), *shares_of(pixels[box_mask], MOST)]
 
@@ -105,38 +117,40 @@ def pieces(mask: Mask) -> tuple[NDArray[np.int32], NDArray[np.float64]]:
     return labels, ndimage.sum_labels(mask, labels, np.arange(1, count + 1))
 
 
-def letter_height(labels: NDArray[np.int32]) -> int:
-    """The typical height of the tallest pieces, as a letter's; 1 when there are none."""
-    heights = [rows.stop - rows.start for rows, _ in ndimage.find_objects(labels) or []]
+def letter_height(labels: NDArray[np.int32], running_off: NDArray[np.int32]) -> int:
+    """The typical height of the tallest pieces not running off, as a letter's, while a border or
+    a figure running past the margin is none; 1 when there are none."""
+    heights = [
+        rows.stop - rows.start
+        for label, (rows, _) in enumerate(ndimage.find_objects(labels) or [], start=1)
+        if label not in running_off
+    ]
     if not heights:
         return 1
     tall = [h for h in heights if h >= LETTER_SHARE * max(heights)]
     return round(float(np.median(tall)))
 
 
-def without_specks(mask: Mask) -> Mask:
+def without_specks(mask: Mask, edge: Mask) -> Mask:
     """`mask` without pieces tiny beside one of its letters, as noise is; accents and dots stay."""
     labels, sizes = pieces(mask)
-    least = SPECK_SHARE * letter_height(labels) ** 2
+    least = SPECK_SHARE * letter_height(labels, np.unique(labels[edge & mask])) ** 2
     return np.isin(labels, np.flatnonzero(sizes >= least) + 1) if sizes.size else mask
+
+
+def seen_text(likely: NDArray[np.uint8], box_mask: Mask) -> Mask:
+    """Where the text finder saw text in the box: a thin band along each line."""
+    return (likely >= TEXT_LIKELY) & ndimage.binary_dilation(box_mask, iterations=RIM)
 
 
 def near_text(likely: NDArray[np.uint8], box_mask: Mask) -> Mask:
     """Where the text finder saw text in the box, grown by the band's own thickness to take in
     whole letters; everywhere when it saw none there, as in a box the model added."""
-    band = (likely >= TEXT_LIKELY) & ndimage.binary_dilation(box_mask, iterations=RIM)
+    band = seen_text(likely, box_mask)
     if not band.any():
         return np.ones_like(box_mask)
     thickness = 2 * float(ndimage.distance_transform_edt(band).max())
     return ndimage.distance_transform_edt(~band) <= thickness
-
-
-def kept_near(text: Mask, allowed: Mask, box_mask: Mask) -> Mask:
-    """Every small piece of text, as letters, accents and dots are; a large piece, as a burst's
-    body behind them, only near where the text finder saw text."""
-    labels, sizes = pieces(text)
-    small = np.flatnonzero(sizes <= SMALL_PIECE * box_mask.sum()) + 1
-    return (text & allowed) | np.isin(labels, small)
 
 
 def paper_in(pixels: Pixels, margin: Mask, box_mask: Mask, near: Mask | None) -> Mask:
@@ -152,17 +166,66 @@ def paper_in(pixels: Pixels, margin: Mask, box_mask: Mask, near: Mask | None) ->
     return paper
 
 
-def text_in(pixels: Pixels, box_mask: Mask, line_height: int, near: Mask | None = None) -> Mask:
-    """The pixels in the box unlike its paper: letters, any halo, any outline the box takes in;
-    and, within REACH of its height past its edge, small pieces wholly there, as accents and a
-    `¡` a box misses."""
+def text_in(
+    pixels: Pixels, box_mask: Mask, line_height: int, near: Mask | None = None
+) -> tuple[Mask, Mask, Mask]:
+    """The letters: small pieces unlike the paper lying wholly within REACH of the box's height
+    past its edge, as letters, accents and a `¡` a box misses are; the rest of the box unlike
+    its paper, as a halo is; and the pieces running past the margin, as a bubble's outline
+    joined to the panel round it is, with any letter touching it."""
     reach = max(RING, round(REACH * line_height))
     margin = ndimage.binary_dilation(box_mask, iterations=reach)
-    far = without_specks(margin & ~paper_in(pixels, margin, box_mask, near))
+    edge = margin & ~ndimage.binary_erosion(margin)
+    far = without_specks(margin & ~paper_in(pixels, margin, box_mask, near), edge)
     labels, sizes = pieces(far)
     small = np.flatnonzero(sizes <= SMALL_PIECE * box_mask.sum()) + 1
-    reaching_out = np.unique(labels[margin & ~ndimage.binary_erosion(margin)])
-    return (far & box_mask) | np.isin(labels, np.setdiff1d(small, reaching_out))
+    running_off = np.unique(labels[edge])
+    letters = np.isin(labels, np.setdiff1d(small, running_off))
+    letters |= inked_letters(far & ink_of(pixels, paper_colours(pixels, box_mask, near)), edge)
+    running = np.isin(labels, np.setdiff1d(running_off, [0])) & ~letters
+    return letters, far & box_mask & ~letters & ~running, running
+
+
+def ink_of(pixels: Pixels, colours: list[NDArray[np.int16]]) -> Mask:
+    """The pixels further than INK from every paper colour, as letters and outlines are, while a
+    caption's own tint is not."""
+    if not colours:
+        return np.ones(pixels.shape[:2], dtype=np.bool_)
+    return np.min([distance(pixels, colour) for colour in colours], axis=0) > INK
+
+
+def inked_letters(ink: Mask, edge: Mask) -> Mask:
+    """The pieces of ink no taller than TALL typical ones and not running past the margin, as the
+    letters on a caption's tint are, while an outline round a bubble is far taller."""
+    labels, _ = pieces(ink)
+    found = ndimage.find_objects(labels) or []
+    heights = np.array([rows.stop - rows.start for rows, _ in found])
+    if not heights.size:
+        return ink
+    short = np.flatnonzero(heights <= TALL * np.median(heights)) + 1
+    return np.isin(labels, np.setdiff1d(short, labels[edge]))
+
+
+def text_of(
+    pixels: Pixels, box_mask: Mask, height: int, likely: NDArray[np.uint8] | None
+) -> tuple[Mask, Mask]:
+    """The text to take out, and the outlines and panels to keep: without the text finder, every
+    letter and the rest of the box; with it, the letters reaching near its lines, the rest near
+    them, and of what runs past the margin only what lies on its lines, as a letter touching an
+    outline does."""
+    if likely is None:
+        letters, rest, running = text_in(pixels, box_mask, height)
+        return letters | rest, running
+    near = near_text(likely, box_mask)
+    letters, rest, running = text_in(pixels, box_mask, height, near)
+    on_lines = running & ndimage.binary_dilation(seen_text(likely, box_mask), iterations=SEEN_GROW)
+    return touching(letters, near) | (rest & near) | on_lines, running & ~on_lines
+
+
+def touching(pieces_of: Mask, near: Mask) -> Mask:
+    """The whole of every piece of `pieces_of` that reaches into `near`."""
+    labels, _ = pieces(pieces_of)
+    return np.isin(labels, np.setdiff1d(labels[near], [0]))
 
 
 def pad_of(text: Mask) -> int:
@@ -178,15 +241,18 @@ def commonest(pixels: Pixels) -> NDArray[np.int16]:
 
 
 def flat_colour(pixels: Pixels, hole: Mask, box_mask: Mask) -> str | None:
-    """When the line just outside the hole is even, the paper's commonest exact colour, taken a
-    little away from the box where letters bleed no tint into it; else None."""
+    """When the line just outside the hole is even, the paper's commonest exact colour, taken in
+    the box a little away from the letters, where they bleed no tint into it and the page round
+    the bubble is not; else None. The line is even when EVEN_SHARE of it is near one colour, so
+    a note or an outline touching it is no bar."""
     edge = ndimage.binary_dilation(hole) & ~hole
-    if not edge.any() or float(pixels[edge].std(axis=0).max()) > EVEN_EDGE:
+    if not edge.any():
         return None
     near = np.median(pixels[edge], axis=0).astype(np.int16)
-    away = ndimage.binary_dilation(box_mask, iterations=AWAY) & ~ndimage.binary_dilation(
-        box_mask, iterations=RING
-    )
+    if float((distance(pixels[edge], near) <= NEAR).mean()) < EVEN_SHARE:
+        return None
+    away = box_mask & ndimage.binary_dilation(hole, iterations=AWAY)
+    away &= ~ndimage.binary_dilation(hole, iterations=RING)
     paper = away & (distance(pixels, near) <= NEAR)
     red, green, blue = (int(v) for v in commonest(pixels[paper] if paper.any() else pixels[edge]))
     return f"#{red:02x}{green:02x}{blue:02x}"
@@ -222,17 +288,14 @@ def erased(
     crop = np.asarray(page.crop((frame.left, frame.top, frame.right, frame.bottom)))
     pixels = crop.astype(np.int16)
     box_mask = inside(frame, box)
-    near = None
-    if likely is not None:
-        corners = (frame.left, frame.top, frame.right, frame.bottom)
-        near = near_text(np.asarray(likely.crop(corners)), box_mask)
-    text = text_in(pixels, box_mask, height, near)
-    if near is not None:
-        text = kept_near(text, near, box_mask)
+    corners = (frame.left, frame.top, frame.right, frame.bottom)
+    seen = None if likely is None else np.asarray(likely.crop(corners))
+    text, kept = text_of(pixels, box_mask, height, seen)
     pad = pad_of(text)
     hole = ndimage.binary_dilation(text, iterations=pad) & ndimage.binary_dilation(
         box_mask | text, iterations=RING
     )
+    hole &= ~kept
     colour = flat_colour(pixels, hole, box_mask)
     out = crop.copy()
     if colour is not None:
@@ -245,5 +308,5 @@ def erased(
         soft_edges = ndimage.binary_dilation(hole, iterations=pad) & ndimage.binary_dilation(
             box_mask | text, iterations=RING + pad
         )
-        out = redrawn(crop, soft_edges, inpainter())
+        out = redrawn(crop, soft_edges & ~kept, inpainter())
     return Patch(Image.fromarray(out), (frame.left, frame.top))

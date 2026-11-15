@@ -51,10 +51,10 @@ Progress:
 
    Running it again keeps notes already in the work folder.
 
-   Then count the pages in `<work folder>/pages`. When your task names no
-   role, the chapter has 2 pages or more, and your bot can run 2 workers or
-   more, you are Prepare: go to [Long chapters](#long-chapters) now, and do
-   not start step 2.
+   Its output lists `text_pages`, the pages where it found text. You are
+   Prepare when three things hold: your task names no role, `text_pages`
+   holds 2 pages or more, and your bot can run 2 workers or more. Then go to
+   [Long chapters](#long-chapters) now, and do not start step 2.
 2. **Read and edit**, one page at a time: the overview for where each box
    sits, then the page's `boxes` sheets to read the text. The number on a box
    is the entry with that `id` in the page's notes. Open a `review` stretch
@@ -120,7 +120,9 @@ Progress:
    5. Render the pages you changed, naming them, such as
       `render "<work folder>" 005 012`, and go back to 1. Stop when no page
       changed. A piece of text still not clean after you changed its entry
-      twice: delete its entry, and say so in your answer.
+      twice: delete its entry, and say so in your answer. Render refuses a
+      page it has drawn 3 times: leave that page as it is. Do not ask to
+      render it again: report `ready`, naming what is still not clean on it.
 4. **Hand over**, in two steps:
    - pack the translated pages next to the input, named as it with the
      target language's English name before its extension, as `chapter.zip`
@@ -128,8 +130,9 @@ Progress:
      ```bash
      cd "<this skill's folder>" && uv run scripts/run.py pack "<work folder>" "<input's folder>/<input's name>-<language>.zip"
      ```
-     It refuses while a page is untranslated, or its notes changed after it
-     was rendered, and names those pages. Working alone, render and check
+     A page with no entries goes in as it is. It refuses while a page is
+     untranslated, or its notes changed after it was rendered, and names
+     those pages. Working alone, render and check
      them as in step 3, then pack again; a Combine reports blocked instead.
    - send that zip to the person with your tool for giving them a file, then
      write your answer.
@@ -139,30 +142,32 @@ Progress:
 Your task says which of these you are. A task that names no role and gives
 a chapter is the first one.
 
-**Prepare.** Run step 1, Detect. Count the pages in `<work folder>/pages`.
-Your task says how many workers your bot can run at once. When it does not,
-take 3. With one page, or a bot that runs one worker, carry on alone with
-steps 2 to 4: there is nothing to share. Otherwise, since reading a page
-takes minutes and a split costs about a minute:
+**Prepare.** Run step 1, Detect. Your task says how many workers your bot
+can run at once. When it does not, take 3. With one page in `text_pages`, or
+a bot that runs one worker, carry on alone with steps 2 to 4: there is
+nothing to share. Otherwise the pages in `text_pages` are split into parts
+of 8 pages. Your bot runs the parts a few at a time, and a worker that
+finishes takes the next part:
 - Write `{}` to `<work folder>/names.json`.
-- Split the pages into as many parts as your bot can run workers, but no
-  more parts than pages, in order and as even as they go: 5 pages for 3
-  workers are 000-001, 002-003 and 004.
-- Call `ticket_report` with the state `ready` and this summary, every path
-  in full and `<language>` the one the person asked for (English when they
+- Split `text_pages` in order into parts of 8 pages, the last part holding
+  what is left. A page not in `text_pages` has no text: it is in no part,
+  and pack takes it as it is.
+- Call `ticket_report` with the state `ready` and this summary. Write one
+  Part line for each part, naming its pages one by one. Write every path in
+  full, and `<language>` as the one the person asked for (English when they
   don't say), since each part sees only its own line:
 
   ```text
-  The chapter has <pages> pages, so it is translated in <parts> parts.
-  Start now one worker for each line below, with the line as its whole task:
-  - Part: translate pages <first>-<last> of the chapter in <work folder> into <language> and render them, with the comic-translator skill.
+  The chapter has <pages> pages, <text pages> of them with text, so it is translated in <parts> parts of up to 8 pages.
+  Start now one ticket for each line below with ticket_route, the line as its whole task:
+  - Part: translate pages <page>, <page>, ... of the chapter in <work folder> into <language> and render them, with the comic-translator skill.
   - (one line for each part)
-  Only after every one of those reports ready, start one worker with this task:
+  Only after every one of those reports ready, start one ticket with ticket_route for this task:
   - Combine: pack the chapter in <work folder> with the comic-translator skill, and hand over <input's folder>/<input's name>-<language>.zip.
   ```
 
 - Stop there. Those lines are for your bot, which starts each one as its
-  own worker, so the person sees every part. Do not read a page yourself.
+  own ticket, so the person sees every part. Do not read a page yourself.
 
 **Part.** Do step 2, Read and edit, into the language your task names, then
 step 3, Render and check, for the pages your task names and no others. Page names are the notes files' names,
@@ -199,6 +204,13 @@ and which part's task names them, so your bot sends them back to that part.
 - Read the text yourself from the `boxes` sheets. Do not install OCR or other
   packages to read it: they are large downloads, and the sheets are enlarged
   for reading.
+- Look only at the images detect and render made: `overview`, `boxes`,
+  `review`, `result-boxes` and `result`. Do not crop, zoom or save images of
+  your own. Every image you open stays in your conversation, so each extra
+  one makes every later step cost more.
+- A bubble cut by the top or bottom edge of a page shows only part of its
+  text. Translate the part that is there, render it once, and leave it: it
+  cannot come out clean, and the rest of the bubble is on the next page.
 - A box must hold every mark of its text, the dots of `!` and `?` too, and
   stay on the bubble except where a letter crosses its outline. Change a
   box's numbers only to fix it, reading them off the ruler.

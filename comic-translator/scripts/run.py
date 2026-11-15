@@ -53,7 +53,7 @@ from comic_translator.notes import (
 )
 from comic_translator.review import overview, review_images
 from comic_translator.sheets import box_sheets
-from comic_translator.tries import count_render, refuse_spent
+from comic_translator.tries import count_render, refuse_spent, renders_so_far, spent
 from comic_translator.turns import turn_of
 
 USAGE = (
@@ -349,14 +349,15 @@ def unrendered(work: Path, pages: Sequence[Path]) -> list[str]:
 def pack(work: Path, archive: Path) -> dict[str, object]:
     """Every page, in page order, in a new archive: translated where it has entries, as it is
     where it has none; refused while any page is untranslated or not rendered since its notes
-    changed."""
+    changed, except a page rendered as many times as it may be, which keeps its last render."""
     if archive.suffix.lower() not in (".zip", ".cbz"):
         raise DetectError(f"{archive} must end in .zip or .cbz")
     pages = pages_of(work)
     notes = notes_of(work, pages)
     ready(notes)
     lettered_pages = set(text_pages(notes))
-    stale = unrendered(work, [p for p in pages if p.stem in lettered_pages])
+    final = set(spent(renders_so_far(work, sorted(lettered_pages))))
+    stale = unrendered(work, [p for p in pages if p.stem in lettered_pages - final])
     if stale:
         raise DetectError(UNRENDERED.format(pages=", ".join(stale)))
     with zipfile.ZipFile(archive, "w") as packed:

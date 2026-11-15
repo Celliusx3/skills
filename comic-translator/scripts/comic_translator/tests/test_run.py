@@ -395,6 +395,24 @@ def test_render_refuses_a_page_rendered_three_times_already(detected: dict) -> N
     assert text.startswith("error: pages 001 were rendered 3 times already")
 
 
+def test_pack_takes_the_last_render_of_a_page_rendered_three_times(
+    detected: dict, tmp_path: Path
+) -> None:
+    work = rendered_chapter(detected)
+    for _ in range(2):
+        assert called(["render", detected["work"], "001"])[0] == 0
+    time.sleep(0.01)
+    (work / "notes" / "001.json").write_text((work / "notes" / "001.json").read_text())
+    archive = tmp_path / "c.zip"
+
+    code, result = called(["pack", detected["work"], str(archive)])
+
+    assert code == 0
+    assert (
+        zipfile.ZipFile(archive).read("001.png") == (work / "translated" / "001.png").read_bytes()
+    )
+
+
 def test_pack_refuses_a_chapter_with_an_untranslated_entry(detected: dict, tmp_path: Path) -> None:
     rendered_chapter(detected)
     entries = json.loads(notes_of(detected).read_text())

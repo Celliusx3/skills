@@ -33,7 +33,7 @@ from comic_translator.detect import (
     page_blocks,
     unpacked,
 )
-from comic_translator.letter import lettered
+from comic_translator.letter import filling_size, lettered
 from comic_translator.models import (
     INPAINTER,
     TEXT_FINDER,
@@ -110,6 +110,7 @@ UNCHANGED = (
 )
 UNDRAWN = "page {found}, which the lettering font cannot draw: write it in words or leave it out"
 JPEG_QUALITY = 90
+SIZE_BAND = 1.15
 FEW_LETTERS = 0.5
 
 
@@ -178,12 +179,36 @@ def translated(
     for entry in entries:
         patch = erased(done, entry.box, inpainter, likely)
         done.paste(patch.image, patch.at)
-    for entry in entries:
-        if entry.translation.strip():
-            others = [other.box for other in entries if other is not entry]
-            patch = lettered(done, page, entry.box, entry.translation, others, entry.original)
-            done.paste(patch.image, patch.at)
+    wording = [entry for entry in entries if entry.translation.strip()]
+    sizes = [
+        filling_size(done, page, e.box, e.translation, others_of(e, entries), e.original)
+        for e in wording
+    ]
+    for entry, size in zip(wording, page_sizes(sizes), strict=True):
+        patch = lettered(
+            done,
+            page,
+            entry.box,
+            entry.translation,
+            others_of(entry, entries),
+            entry.original,
+            size,
+        )
+        done.paste(patch.image, patch.at)
     return done
+
+
+def others_of(entry: Entry, entries: list[Entry]) -> list[Box]:
+    return [other.box for other in entries if other is not entry]
+
+
+def page_sizes(sizes: Sequence[int]) -> list[int]:
+    """Each entry's size, no more than SIZE_BAND of the page's middle size, so that one page's
+    lettering stays one size where the bubbles allow it."""
+    if not sizes:
+        return []
+    most = round(SIZE_BAND * float(np.median(sizes)))
+    return [min(size, most) for size in sizes]
 
 
 def cleared(folder: Path, stem: str) -> Path:

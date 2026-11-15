@@ -51,10 +51,10 @@ Progress:
 
    Running it again keeps notes already in the work folder.
 
-   Its output lists `text_pages`, the pages where it found text. You are
-   Prepare when three things hold: your task names no role, `text_pages`
-   holds 2 pages or more, and your bot can run 2 workers or more. Then go to
-   [Long chapters](#long-chapters) now, and do not start step 2.
+   Then count the pages in `<work folder>/pages`. When your task names no
+   role, the chapter has 2 pages or more, and your bot can run 2 workers or
+   more, you are Prepare: go to [Long chapters](#long-chapters) now, and do
+   not start step 2.
 2. **Read and edit**, one page at a time: the overview for where each box
    sits, then the page's `boxes` sheets to read the text. The number on a box
    is the entry with that `id` in the page's notes. Open a `review` stretch
@@ -142,25 +142,23 @@ Progress:
 Your task says which of these you are. A task that names no role and gives
 a chapter is the first one.
 
-**Prepare.** Run step 1, Detect. Your task says how many workers your bot
-can run at once. When it does not, take 3. With one page in `text_pages`, or
-a bot that runs one worker, carry on alone with steps 2 to 4: there is
-nothing to share. Otherwise the pages in `text_pages` are split into parts
-of 8 pages. Your bot runs the parts a few at a time, and a worker that
-finishes takes the next part:
+**Prepare.** Run step 1, Detect. Count the pages in `<work folder>/pages`.
+Your task says how many workers your bot can run at once. When it does not,
+take 3. With one page, or a bot that runs one worker, carry on alone with
+steps 2 to 4: there is nothing to share. Otherwise, since reading a page
+takes minutes and a split costs about a minute:
 - Write `{}` to `<work folder>/names.json`.
-- Split `text_pages` in order into parts of 8 pages, the last part holding
-  what is left. A page not in `text_pages` has no text: it is in no part,
-  and pack takes it as it is.
-- Call `ticket_report` with the state `ready` and this summary. Write one
-  Part line for each part, naming its pages one by one. Write every path in
-  full, and `<language>` as the one the person asked for (English when they
+- Split the pages into as many parts as your bot can run workers, but no
+  more parts than pages, in order and as even as they go: 5 pages for 3
+  workers are 000-001, 002-003 and 004.
+- Call `ticket_report` with the state `ready` and this summary, every path
+  in full and `<language>` the one the person asked for (English when they
   don't say), since each part sees only its own line:
 
   ```text
-  The chapter has <pages> pages, <text pages> of them with text, so it is translated in <parts> parts of up to 8 pages.
+  The chapter has <pages> pages, so it is translated in <parts> parts.
   Start now one ticket for each line below with ticket_route, the line as its whole task:
-  - Part: translate pages <page>, <page>, ... of the chapter in <work folder> into <language> and render them, with the comic-translator skill.
+  - Part: translate pages <first>-<last> of the chapter in <work folder> into <language> and render them, with the comic-translator skill.
   - (one line for each part)
   Only after every one of those reports ready, start one ticket with ticket_route for this task:
   - Combine: pack the chapter in <work folder> with the comic-translator skill, and hand over <input's folder>/<input's name>-<language>.zip.

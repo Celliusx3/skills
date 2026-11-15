@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import zipfile
 from collections.abc import Callable
@@ -43,6 +44,11 @@ class DetectError(ValueError):
     """An input that holds no pages to translate."""
 
 
+def number_order(name: str) -> list[str | int]:
+    """`name` split into text and numbers, so that `9.jpg` sorts before `10.jpg`."""
+    return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", name)]
+
+
 def unpacked(source: Path, pages: Path) -> list[Path]:
     """The pages of `source`, an image or an archive of images, copied into `pages` in order."""
     pages.mkdir(parents=True, exist_ok=True)
@@ -53,7 +59,8 @@ def unpacked(source: Path, pages: Path) -> list[Path]:
         raise DetectError(f"{source.name} is not an image or an archive of images ({kinds})")
     copied = []
     with zipfile.ZipFile(source) as archive:
-        names = sorted(n for n in archive.namelist() if Path(n).suffix.lower() in IMAGES)
+        images = (n for n in archive.namelist() if Path(n).suffix.lower() in IMAGES)
+        names = sorted(images, key=number_order)
         for name in names:
             target = pages / Path(name).name
             target.write_bytes(archive.read(name))

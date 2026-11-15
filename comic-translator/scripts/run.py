@@ -27,6 +27,7 @@ from comic_translator.detect import (
     held_lines,
     letters_held,
     line_boxes,
+    number_order,
     page_blocks,
     unpacked,
 )
@@ -287,7 +288,7 @@ def chosen(pages: Sequence[Path], names: Sequence[str]) -> list[Path]:
         raise DetectError(
             f"the work folder has no page {', '.join(unknown)}; its pages are {', '.join(held)}"
         )
-    return [held[name] for name in sorted(set(names))]
+    return [held[name] for name in sorted(set(names), key=number_order)]
 
 
 def ready(notes: dict[str, list[Entry]]) -> None:
@@ -301,7 +302,9 @@ def ready(notes: dict[str, list[Entry]]) -> None:
 
 
 def pages_of(work: Path) -> list[Path]:
-    pages = sorted(p for p in (work / "pages").iterdir() if p.is_file())
+    pages = sorted(
+        (p for p in (work / "pages").iterdir() if p.is_file()), key=lambda p: number_order(p.name)
+    )
     if not pages:
         raise DetectError(f"{work} holds no pages; run detect first")
     return pages

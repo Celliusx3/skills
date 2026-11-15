@@ -110,6 +110,8 @@ def moved(entries: list[Entry], found: list[Entry]) -> list[tuple[Entry, Box]]:
 def read_notes(path: Path, size: tuple[int, int]) -> list[Entry]:
     try:
         raw = json.loads(path.read_text())
+    except FileNotFoundError as error:
+        raise NotesError(f"{path.name} is missing: run detect again to write it") from error
     except json.JSONDecodeError as error:
         raise NotesError(f"{path.name} is not valid JSON: {error}") from error
     return entries_from(raw, size)

@@ -371,6 +371,19 @@ def test_detect_names_the_pages_that_hold_text(
     assert result["text_pages"] == ["01"]
 
 
+def test_pack_refuses_a_page_whose_notes_are_missing_naming_it(
+    detected: dict, tmp_path: Path
+) -> None:
+    work = rendered_chapter(detected)
+    (work / "notes" / "002.json").unlink()
+
+    code, text = called(["pack", detected["work"], str(tmp_path / "c.zip")])
+
+    assert code == 1
+    assert text.startswith("error: 002.json is missing")
+    assert not (tmp_path / "c.zip").exists()
+
+
 def test_pack_refuses_a_chapter_with_an_untranslated_entry(detected: dict, tmp_path: Path) -> None:
     rendered_chapter(detected)
     entries = json.loads(notes_of(detected).read_text())

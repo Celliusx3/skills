@@ -22,6 +22,7 @@ from typing import TextIO
 import numpy as np
 from PIL import Image
 
+from comic_translator.bubbles import by_paragraph
 from comic_translator.clean import erased
 from comic_translator.detect import (
     DetectError,
@@ -121,6 +122,7 @@ def detected_page(session: Session, path: Path, work: Path) -> dict[str, object]
     its notes; drawn on its images as the notes have them."""
     page = page_image(path)
     blocks, likely = page_blocks(session, page)
+    blocks = by_paragraph(blocks)
     found = [Entry(n, box, "", "") for n, box in enumerate(blocks, start=1)]
     (work / "maps").mkdir(parents=True, exist_ok=True)
     likely.save(work / "maps" / f"{path.stem}.png", optimize=True)

@@ -6,7 +6,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from comic_translator.clean import erased as erased_patch
-from comic_translator.clean import paper_in, shares_of
+from comic_translator.clean import paper_in, shares_of, with_opening_mark
 from comic_translator.notes import Box
 from comic_translator.tests.fakes import FlatGrey
 
@@ -183,3 +183,45 @@ def test_a_caption_narrowing_under_its_last_line_is_filled_with_its_paper_not_th
 
     assert after[100:143, 90:246].min() == 255
     assert page.getpixel((300, 140)) == (104, 189, 234)
+
+
+def test_a_word_whose_tip_pokes_past_the_box_is_erased_whole() -> None:
+    page = Image.new("RGB", (400, 300), "white")
+    likely = Image.new("L", (400, 300), 0)
+    pen = ImageDraw.Draw(page)
+    for x in range(110, 280, 30):
+        pen.rectangle((x, 100, x + 18, 170), fill=(240, 160, 200), outline="black", width=3)
+    pen.rectangle((110, 168, 288, 171), fill="black")
+    pen.rectangle((200, 70, 206, 100), fill="black")
+    ImageDraw.Draw(likely).rectangle((110, 130, 290, 140), fill=255)
+
+    patch = erased_patch(page, Box(105, 95, 295, 175), FlatGrey, likely)
+    page.paste(patch.image, patch.at)
+
+    assert np.asarray(page)[100:171, 110:291].min() > 200
+
+
+def test_a_mark_whose_stem_runs_into_the_outline_is_erased_while_the_outline_stays() -> None:
+    page, likely = round_bubble()
+    pen = ImageDraw.Draw(page)
+    pen.rectangle((106, 160, 114, 199), fill=(140, 120, 200), outline="black", width=2)
+    pen.ellipse((105, 140, 115, 150), fill=(140, 120, 200), outline="black", width=2)
+    before = np.asarray(page).copy()
+
+    patch = erased_patch(page, Box(100, 125, 300, 185), FlatGrey, likely)
+    page.paste(patch.image, patch.at)
+    after = np.asarray(page)
+
+    assert after[140:190, 106:115].min() > 200
+    rim = (before.max(axis=-1) < 100) & (np.arange(300)[:, None] > 205)
+    assert np.array_equal(after[rim], before[rim])
+
+
+def test_a_line_opening_with_an_inverted_mark_is_erased_from_further_left() -> None:
+    assert with_opening_mark(Box(100, 200, 300, 250), "¡AH!") == Box(80, 200, 300, 250)
+    assert with_opening_mark(Box(100, 200, 300, 250), " ¿QUÉ?") == Box(80, 200, 300, 250)
+
+
+def test_a_line_without_an_opening_mark_keeps_its_box_and_none_reaches_off_the_page() -> None:
+    assert with_opening_mark(Box(100, 200, 300, 250), "AH!") == Box(100, 200, 300, 250)
+    assert with_opening_mark(Box(5, 200, 300, 250), "¡AH!") == Box(0, 200, 300, 250)

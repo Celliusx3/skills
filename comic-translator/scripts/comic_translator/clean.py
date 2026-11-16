@@ -30,6 +30,10 @@ GHOST = 90
 GHOST_REACH = 2
 SMALL_PIECE = 0.1
 REACH = 0.15
+PAST_BOX = 0.1
+THIN = 2
+OPENING_MARKS = "¡¿"
+OPENING_REACH = 0.4
 AWAY = 12
 MARGIN = 2.0
 SEEN_GROW = 2
@@ -47,6 +51,15 @@ class Patch:
 
     image: Image.Image
     at: tuple[int, int]
+
+
+def with_opening_mark(box: Box, original: str) -> Box:
+    """`box` reaching OPENING_REACH of its height further left when its text opens with `¡` or
+    `¿`, a mark too thin for the text finder that its box so often stops short of."""
+    if original.lstrip()[:1] not in OPENING_MARKS:
+        return box
+    reach = round(OPENING_REACH * (box.bottom - box.top))
+    return Box(max(0, box.left - reach), box.top, box.right, box.bottom)
 
 
 def frame_of(box: Box, size: tuple[int, int], grow: int) -> Box:
@@ -179,11 +192,39 @@ def text_in(
     far = without_specks(margin & ~paper_in(pixels, margin, box_mask, near), edge)
     labels, sizes = pieces(far)
     small = np.flatnonzero(sizes <= SMALL_PIECE * box_mask.sum()) + 1
-    running_off = np.unique(labels[edge])
-    letters = np.isin(labels, np.setdiff1d(small, running_off))
+    words = poking_out(labels, box_mask)
+    running_off = np.setdiff1d(np.unique(labels[edge]), words)
+    letters = np.isin(labels, np.union1d(np.setdiff1d(small, running_off), words))
     letters |= inked_letters(far & ink_of(pixels, paper_colours(pixels, box_mask, near)), edge)
     running = np.isin(labels, np.setdiff1d(running_off, [0])) & ~letters
+    cores = marks_on_lines(running, letters, box_mask)
+    letters |= cores
+    running &= ~cores
     return letters, far & box_mask & ~letters & ~running, running
+
+
+def marks_on_lines(running: Mask, letters: Mask, box_mask: Mask) -> Mask:
+    """The thick small marks inside the box that only a thin line joins to what runs past the
+    margin, as a `¡` whose stem touches the bubble's outline is, with their own rim: what is
+    left of it and the letters once lines up to THIN wide are peeled off, no larger than
+    SMALL_PIECE of the box, at least half in it and mostly not letters, so a caption's tint cut
+    up by its letters stays whole."""
+    cores, sizes = pieces(ndimage.binary_opening(running | letters, iterations=THIN))
+    in_box = np.bincount(cores[box_mask], minlength=sizes.size + 1)[1:]
+    of_running = np.bincount(cores[running], minlength=sizes.size + 1)[1:]
+    small = sizes <= SMALL_PIECE * box_mask.sum()
+    marks = np.flatnonzero(small & (in_box >= sizes / 2) & (of_running >= sizes / 2)) + 1
+    found = np.isin(cores, marks)
+    return running & ndimage.binary_dilation(found, iterations=THIN + 1)
+
+
+def poking_out(labels: NDArray[np.int32], box_mask: Mask) -> NDArray[np.int32]:
+    """The pieces with no more than PAST_BOX of themselves outside the box, as a word whose
+    tips cross the margin is, while an outline or a panel lies much further out."""
+    sizes = np.bincount(labels.ravel())
+    inside_box = np.bincount(labels[box_mask], minlength=sizes.size)
+    outside = sizes - inside_box
+    return np.setdiff1d(np.flatnonzero(outside <= PAST_BOX * sizes), [0])
 
 
 def ink_of(pixels: Pixels, colours: list[NDArray[np.int16]]) -> Mask:

@@ -14,6 +14,8 @@ from comic_translator.notes import Box
 
 FONT = Path(__file__).parent / "fonts" / "Mali-Bold.ttf"
 SMALLEST = 8
+LARGEST = 64
+ORIGINAL_SHARE = 2.0
 LINE_PITCH = 1.45
 OUTLINE_SHARE = 0.08
 CLEAN_NEAR = 60
@@ -290,15 +292,31 @@ def drawn(done: Image.Image, room: Box, lines: list[str], size: int, paint: Pain
         )
 
 
-def lettered(
+def filling_size(
     page: Image.Image, original: Image.Image, box: Box, text: str, taken: list[Box], written: str
+) -> int:
+    """The largest size at which `text` fills the room around `box`, no more than ORIGINAL_SHARE
+    of the original's letters, `written` being their text."""
+    _, room, _ = room_around(page, box, taken)
+    most = min(LARGEST, round(ORIGINAL_SHARE * tallest(original, box, written)))
+    return fitted(text, room, most)[0]
+
+
+def lettered(
+    page: Image.Image,
+    original: Image.Image,
+    box: Box,
+    text: str,
+    taken: list[Box],
+    written: str,
+    most: int | None = None,
 ) -> Patch:
-    """The piece of `page` around `box` with `text` lettered in its plain room, no taller than the
-    original's letters, `written` being their text; on a busy background, inside the box and
-    edged."""
+    """The piece of `page` around `box` with `text` lettered in its plain room, no taller than
+    `most`, or than the original's letters, `written` being their text, when `most` is not
+    given; on a busy background, inside the box and edged."""
     area, room, roomy = room_around(page, box, taken)
     done = page.crop(area.corners())
-    size, lines = fitted(text, room, tallest(original, box, written))
+    size, lines = fitted(text, room, most if most is not None else tallest(original, box, written))
     ink, edge = colours(page, box)
     drawn(done, room, lines, size, (ink, None if roomy else edge))
     return Patch(done, (area.left, area.top))

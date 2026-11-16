@@ -1,6 +1,8 @@
 [
   {
-    "skills": ["comic-translator"],
+    "skills": [
+      "comic-translator"
+    ],
     "query": "Translate this comic into English with the comic-translator skill. Your bot can run 1 worker at once.",
     "files": [
       "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",
@@ -10,17 +12,19 @@
     ],
     "files_as": "one .zip of the four pages, in this order",
     "expected_behavior": [
-      "Runs detect, render and pack from the skill's folder with `uv run scripts/run.py`, without reading or copying the scripts",
+      "Runs detect, names-jobs, names, jobs, apply, render and pack from the skill's folder with `uv run scripts/run.py`, without reading or copying the scripts",
       "Asks before installing uv when it is missing, and installs it only after a yes",
+      "Answers every job in each jobs file and saves each reply to its save_to, using a tool that takes the whole file when it has one",
       "Translates every speech bubble: '...y el toque final.' becomes '...and the final touch.' or close",
-      "Leaves the sound effects drawn on the art (SHH SHH, PLOP) as they are, by deleting their entries",
-      "Keeps every box as detect wrote it unless fixing it, and render reports no warnings",
-      "Letters the title page's 'Pepper and Carrot / Episode 1: …' once, whole, with no word cut by another box",
+      "Leaves the sound effects drawn on the art (SHH SHH, PLOP) as they are",
+      "Looks again only at the pages apply flags or render warns about",
       "Packs the four translated pages with pack into pepper-carrot-ep01-es-english.zip next to the input, and hands it over"
     ]
   },
   {
-    "skills": ["comic-translator"],
+    "skills": [
+      "comic-translator"
+    ],
     "query": "Can you translate this page to English?",
     "files": [
       "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P02.jpg"
@@ -33,20 +37,24 @@
     ]
   },
   {
-    "skills": ["comic-translator"],
+    "skills": [
+      "comic-translator"
+    ],
     "query": "Translate this comic to English, then fix anything that still looks wrong.",
     "files": [
       "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P01.jpg"
     ],
     "files_as": "the single page image",
     "expected_behavior": [
-      "Looks at the result-boxes sheets after rendering",
+      "Opens the boxes and result-boxes sheets of the pages apply flagged or render warned about",
       "Renders again after any edit, and stops once the page is clean",
       "When a command is still running, waits by sending the identical command, never a changed one"
     ]
   },
   {
-    "skills": ["comic-translator"],
+    "skills": [
+      "comic-translator"
+    ],
     "query": "Translate this comic into English with the comic-translator skill. Your bot can run 3 workers at once.",
     "files": [
       "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",
@@ -64,15 +72,17 @@
     ],
     "files_as": "one .zip of the twelve pages, in this order",
     "expected_behavior": [
-      "Acts as Prepare: runs detect, then stops before reading any page",
-      "Writes {} to names.json in the work folder",
-      "Reports ready with 'The chapter has 12 pages, so it is translated in 3 parts.'",
-      "Lists three Part task lines to start now, each to translate pages 000-003, 004-007 and 008-011 into English and render them, with the work folder's full path",
-      "Lists one Combine task line to start only after every part reports ready, that packs the work folder and hands over <input>-english.zip next to the input"
+      "Acts as Prepare: runs detect, names-jobs, answers the names jobs, runs names, then parts",
+      "Does not run jobs, apply or render, and translates no page itself",
+      "Reports parts' summary exactly as printed: 'The chapter has 12 pages, 12 of them with text, so it is translated in 3 parts.' or the counts detect found",
+      "The summary lists three Part lines naming four pages each, in page order, with the work folder's full path, to start now",
+      "The summary ends with one Combine line, to start only after every Part reports ready, that packs the work folder and hands over <input>-english.zip next to the input"
     ]
   },
   {
-    "skills": ["comic-translator"],
+    "skills": [
+      "comic-translator"
+    ],
     "query": "Translate this comic into English with the comic-translator skill. Your bot can run 3 workers at once.",
     "files": [
       "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",
@@ -82,13 +92,15 @@
     ],
     "files_as": "one .zip of the four pages, in this order",
     "expected_behavior": [
-      "Acts as Prepare even for 4 pages: runs detect, then stops before reading any page",
-      "Reports three Part task lines to start now, for pages 000-001, 002 and 003, each into English"
+      "Acts as Prepare even for 4 pages: runs detect, names-jobs, names and parts, and translates no page itself",
+      "Reports three Part lines, for the 4 pages split 2, 1 and 1, each into English"
     ]
   },
   {
-    "skills": ["comic-translator"],
-    "query": "Part: translate pages 000-001 of the chapter in <work folder> into English and render them, with the comic-translator skill.",
+    "skills": [
+      "comic-translator"
+    ],
+    "query": "Part: translate pages 000, 001 of the chapter in <work folder> into English, with the comic-translator skill.",
     "files": [
       "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",
       "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P01.jpg",
@@ -97,16 +109,18 @@
     ],
     "files_as": "a work folder made by detect from one .zip of the four pages, holding names.json with {\"Pepper\": \"Pepper\"}",
     "expected_behavior": [
-      "Reads and edits the notes of pages 000 and 001 only, and leaves 002 and 003 untouched",
-      "Translates into English, the language its task names, with no translation left the same as its original unless it already reads right",
-      "Reads names.json before each page and keeps 'Pepper' as it is",
-      "Adds any new name it meets, such as 'Carrot', to names.json without dropping 'Pepper'",
-      "Renders pages 000 and 001 only, naming them after the work folder, and looks at their result-boxes sheets",
-      "Reports ready, once both pages are clean, with how many pages and entries it translated"
+      "Runs jobs for pages 000 and 001 only, and leaves 002 and 003 untouched",
+      "Answers every job in the jobs file and saves each reply to its save_to",
+      "Runs apply for 000 and 001, then renders those two pages, naming them after the work folder",
+      "Keeps 'Pepper' as names.json writes it",
+      "Opens the sheets only of a page apply flagged or render warned about",
+      "Reports how many pages it translated, and the pages it looked at again and why"
     ]
   },
   {
-    "skills": ["comic-translator"],
+    "skills": [
+      "comic-translator"
+    ],
     "query": "Combine: pack the chapter in <work folder> with the comic-translator skill, and hand over <input's folder>/chapter-english.zip.",
     "files": [
       "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/es_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",

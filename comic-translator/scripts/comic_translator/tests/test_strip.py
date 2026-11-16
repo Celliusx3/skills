@@ -48,6 +48,13 @@ def test_only_pages_of_one_width_far_taller_than_wide_are_a_strip() -> None:
     assert is_strip([(100, 250), (100, 250), (100, 90)])
 
 
+def test_a_strip_with_a_few_short_pieces_in_it_is_still_a_strip() -> None:
+    lookism_ep1 = [(690, 2000)] * 5 + [(690, 234), (690, 2000), (690, 148)] + [(690, 2000)] * 4
+
+    assert is_strip(lookism_ep1)
+    assert not is_strip([(100, 250), (100, 140), (100, 140)])
+
+
 def test_cuts_fall_in_blank_gaps_and_never_through_drawn_rows() -> None:
     blank = np.ones(750, dtype=bool)
     blank[230:271] = False

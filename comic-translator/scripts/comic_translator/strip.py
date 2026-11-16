@@ -36,10 +36,10 @@ def image_of(path: Path) -> Image.Image:
 
 def is_strip(sizes: Sequence[tuple[int, int]]) -> bool:
     """Whether pages of these sizes are one tall strip cut in pieces: 2 or more, all one width,
-    each but the last, which holds what was left, far taller than wide."""
+    and the middle one by height far taller than wide, as a few short pieces do not change."""
     widths = {width for width, _ in sizes}
-    tall = all(h >= STRIP_RATIO * w for w, h in sizes[:-1])
-    return len(sizes) >= 2 and len(widths) == 1 and tall
+    tall = len(sizes) >= 2 and np.median([h for _, h in sizes]) >= STRIP_RATIO * sizes[0][0]
+    return len(widths) == 1 and bool(tall)
 
 
 def blank_rows(image: Image.Image) -> NDArray[np.bool_]:

@@ -19,6 +19,7 @@ CLIENT_TOOLS = (
     "execute_typescript",
     "ask_about_images",
     "ask_about_image_jobs",
+    "ask_model",
     "computer__",
 )
 

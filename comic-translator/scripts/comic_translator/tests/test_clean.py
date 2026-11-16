@@ -6,7 +6,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from comic_translator.clean import erased as erased_patch
-from comic_translator.clean import paper_in, shares_of
+from comic_translator.clean import paper_in, shares_of, with_opening_mark
 from comic_translator.notes import Box
 from comic_translator.tests.fakes import FlatGrey
 
@@ -215,3 +215,13 @@ def test_a_mark_whose_stem_runs_into_the_outline_is_erased_while_the_outline_sta
     assert after[140:190, 106:115].min() > 200
     rim = (before.max(axis=-1) < 100) & (np.arange(300)[:, None] > 205)
     assert np.array_equal(after[rim], before[rim])
+
+
+def test_a_line_opening_with_an_inverted_mark_is_erased_from_further_left() -> None:
+    assert with_opening_mark(Box(100, 200, 300, 250), "¡AH!") == Box(80, 200, 300, 250)
+    assert with_opening_mark(Box(100, 200, 300, 250), " ¿QUÉ?") == Box(80, 200, 300, 250)
+
+
+def test_a_line_without_an_opening_mark_keeps_its_box_and_none_reaches_off_the_page() -> None:
+    assert with_opening_mark(Box(100, 200, 300, 250), "AH!") == Box(100, 200, 300, 250)
+    assert with_opening_mark(Box(5, 200, 300, 250), "¡AH!") == Box(0, 200, 300, 250)

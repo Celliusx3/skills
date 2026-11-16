@@ -199,3 +199,19 @@ def test_a_word_whose_tip_pokes_past_the_box_is_erased_whole() -> None:
     page.paste(patch.image, patch.at)
 
     assert np.asarray(page)[100:171, 110:291].min() > 200
+
+
+def test_a_mark_whose_stem_runs_into_the_outline_is_erased_while_the_outline_stays() -> None:
+    page, likely = round_bubble()
+    pen = ImageDraw.Draw(page)
+    pen.rectangle((106, 160, 114, 199), fill=(140, 120, 200), outline="black", width=2)
+    pen.ellipse((105, 140, 115, 150), fill=(140, 120, 200), outline="black", width=2)
+    before = np.asarray(page).copy()
+
+    patch = erased_patch(page, Box(100, 125, 300, 185), FlatGrey, likely)
+    page.paste(patch.image, patch.at)
+    after = np.asarray(page)
+
+    assert after[140:190, 106:115].min() > 200
+    rim = (before.max(axis=-1) < 100) & (np.arange(300)[:, None] > 205)
+    assert np.array_equal(after[rim], before[rim])

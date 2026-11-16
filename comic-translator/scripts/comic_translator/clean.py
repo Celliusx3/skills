@@ -30,6 +30,7 @@ GHOST = 90
 GHOST_REACH = 2
 SMALL_PIECE = 0.1
 REACH = 0.15
+PAST_BOX = 0.1
 AWAY = 12
 MARGIN = 2.0
 SEEN_GROW = 2
@@ -179,11 +180,21 @@ def text_in(
     far = without_specks(margin & ~paper_in(pixels, margin, box_mask, near), edge)
     labels, sizes = pieces(far)
     small = np.flatnonzero(sizes <= SMALL_PIECE * box_mask.sum()) + 1
-    running_off = np.unique(labels[edge])
-    letters = np.isin(labels, np.setdiff1d(small, running_off))
+    words = poking_out(labels, box_mask)
+    running_off = np.setdiff1d(np.unique(labels[edge]), words)
+    letters = np.isin(labels, np.union1d(np.setdiff1d(small, running_off), words))
     letters |= inked_letters(far & ink_of(pixels, paper_colours(pixels, box_mask, near)), edge)
     running = np.isin(labels, np.setdiff1d(running_off, [0])) & ~letters
     return letters, far & box_mask & ~letters & ~running, running
+
+
+def poking_out(labels: NDArray[np.int32], box_mask: Mask) -> NDArray[np.int32]:
+    """The pieces with no more than PAST_BOX of themselves outside the box, as a word whose
+    tips cross the margin is, while an outline or a panel lies much further out."""
+    sizes = np.bincount(labels.ravel())
+    inside_box = np.bincount(labels[box_mask], minlength=sizes.size)
+    outside = sizes - inside_box
+    return np.setdiff1d(np.flatnonzero(outside <= PAST_BOX * sizes), [0])
 
 
 def ink_of(pixels: Pixels, colours: list[NDArray[np.int16]]) -> Mask:

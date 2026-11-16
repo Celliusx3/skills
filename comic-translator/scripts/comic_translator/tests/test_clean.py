@@ -183,3 +183,19 @@ def test_a_caption_narrowing_under_its_last_line_is_filled_with_its_paper_not_th
 
     assert after[100:143, 90:246].min() == 255
     assert page.getpixel((300, 140)) == (104, 189, 234)
+
+
+def test_a_word_whose_tip_pokes_past_the_box_is_erased_whole() -> None:
+    page = Image.new("RGB", (400, 300), "white")
+    likely = Image.new("L", (400, 300), 0)
+    pen = ImageDraw.Draw(page)
+    for x in range(110, 280, 30):
+        pen.rectangle((x, 100, x + 18, 170), fill=(240, 160, 200), outline="black", width=3)
+    pen.rectangle((110, 168, 288, 171), fill="black")
+    pen.rectangle((200, 70, 206, 100), fill="black")
+    ImageDraw.Draw(likely).rectangle((110, 130, 290, 140), fill=255)
+
+    patch = erased_patch(page, Box(105, 95, 295, 175), FlatGrey, likely)
+    page.paste(patch.image, patch.at)
+
+    assert np.asarray(page)[100:171, 110:291].min() > 200

@@ -1,4 +1,4 @@
-"""The one-call-per-page commands: parts, programs, the names list, and answers into notes."""
+"""The one-call-per-page commands: parts, jobs files, the names list, and answers into notes."""
 
 from __future__ import annotations
 
@@ -10,7 +10,17 @@ import pytest
 from PIL import Image, ImageDraw
 
 import run
-from comic_translator.batch import PAGES_PER_PROGRAM, split_evenly
+from comic_translator.batch import split_evenly
+
+SKILL = Path(__file__).parents[3]
+CLIENT_TOOLS = (
+    "ticket_route",
+    "ticket_report",
+    "execute_typescript",
+    "ask_about_images",
+    "ask_about_image_jobs",
+    "computer__",
+)
 
 BOX = {"left": 20, "top": 20, "right": 40, "bottom": 30}
 
@@ -64,38 +74,33 @@ def test_parts_name_each_part_s_pages_and_leave_out_pages_with_no_text(work: Pat
     assert f"- Part: translate pages 9, 10 of the chapter in {work} into English" in summary
     assert f"- Part: translate pages 100 of the chapter in {work} into English" in summary
     assert "hand over /x/ch-english.zip." in summary
+    assert "Start one worker task for each line below now" in summary
 
 
-def test_a_program_calls_ask_about_images_once_per_page_saving_its_answer(work: Path) -> None:
+def jobs_at(path: str) -> list[dict]:
+    return json.loads(Path(path).read_text())
+
+
+def test_a_jobs_file_lists_one_job_per_page_saving_its_answer(work: Path) -> None:
     (work / "names.json").write_text(json.dumps({"민준": "Minjun"}))
 
-    code, result = called(["programs", str(work), "English", "9", "100"])
+    code, result = called(["jobs", str(work), "English", "9", "100"])
 
     assert code == 0
-    [program] = result["programs"]
-    calls = json.loads(program.splitlines()[0].removeprefix("const calls = ").removesuffix(";"))
-    assert [c["save_to"] for c in calls] == [
+    assert result["jobs"] == str(work / "jobs" / "pages-9-100.json")
+    assert result["count"] == 2
+    jobs = jobs_at(result["jobs"])
+    assert [set(job) for job in jobs] == [{"paths", "instructions", "save_to"}] * 2
+    assert [job["save_to"] for job in jobs] == [
         str(work / "drafts" / f"{p}.json") for p in ("9", "100")
     ]
-    assert calls[0]["paths"] == [str(work / "boxes" / "9-1.jpg")]
-    assert "For every box number in 1, 2," in calls[0]["instructions"]
-    assert '{"민준": "Minjun"}' in calls[0]["instructions"]
-    assert "await ask_about_images(call);" in program
+    assert jobs[0]["paths"] == [str(work / "boxes" / "9-1.jpg")]
+    assert "For every box number in 1, 2," in jobs[0]["instructions"]
+    assert '{"민준": "Minjun"}' in jobs[0]["instructions"]
 
 
-def test_many_pages_are_split_into_several_programs(work: Path) -> None:
-    for page in range(200, 200 + PAGES_PER_PROGRAM + 1):
-        (work / "notes" / f"{page}.json").write_text(json.dumps([{"id": 1, "box": BOX}]))
-    pages = [str(p) for p in range(200, 200 + PAGES_PER_PROGRAM + 1)]
-
-    code, result = called(["programs", str(work), "English", *pages])
-
-    assert code == 0
-    assert len(result["programs"]) == 2
-
-
-def test_programs_refuse_a_page_with_no_text(work: Path) -> None:
-    code, text = called(["programs", str(work), "English", "11"])
+def test_jobs_refuse_a_page_with_no_text(work: Path) -> None:
+    code, text = called(["jobs", str(work), "English", "11"])
 
     assert code == 1
     assert text == "error: pages 11 have no text to translate"
@@ -177,16 +182,25 @@ def test_saved_names_are_added_to_the_names_list_keeping_those_already_there(wor
     assert json.loads((work / "names.json").read_text()) == result["names"]
 
 
-def test_the_names_program_reads_the_box_sheets_a_few_at_a_time(work: Path) -> None:
-    code, result = called(["names-programs", str(work), "English"])
+def test_the_names_jobs_read_the_box_sheets_a_few_at_a_time(work: Path) -> None:
+    code, result = called(["names-jobs", str(work), "English"])
 
     assert code == 0
-    [program] = result["programs"]
-    calls = json.loads(program.splitlines()[0].removeprefix("const calls = ").removesuffix(";"))
-    assert [c["paths"] for c in calls] == [
-        [str(work / "boxes" / f"{p}-1.jpg") for p in ("9", "10", "100")]
-    ]
-    assert calls[0]["save_to"] == str(work / "drafts" / "names-1.json")
+    assert result == {"jobs": str(work / "jobs" / "names.json"), "count": 1}
+    [job] = jobs_at(result["jobs"])
+    assert job["paths"] == [str(work / "boxes" / f"{p}-1.jpg") for p in ("9", "10", "100")]
+    assert job["save_to"] == str(work / "drafts" / "names-1.json")
+
+
+def test_the_skill_names_no_tool_of_the_client_it_runs_in() -> None:
+    for path in (
+        SKILL / "SKILL.md",
+        SKILL / "scripts" / "run.py",
+        *(SKILL / "scripts" / "comic_translator").glob("*.py"),
+        *(SKILL / "scripts" / "comic_translator" / "instructions").glob("*.txt"),
+    ):
+        text = path.read_text()
+        assert not [tool for tool in CLIENT_TOOLS if tool in text], path
 
 
 def test_a_folder_that_is_not_a_work_folder_is_refused(tmp_path: Path) -> None:

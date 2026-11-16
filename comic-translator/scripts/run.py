@@ -23,7 +23,7 @@ import numpy as np
 from PIL import Image
 
 from comic_translator.answers import applied
-from comic_translator.batch import merged_names, names_programs, page_programs, parts_summary
+from comic_translator.batch import merged_names, names_jobs, page_jobs, parts_summary
 from comic_translator.bubbles import by_paragraph
 from comic_translator.clean import erased
 from comic_translator.detect import (
@@ -64,8 +64,8 @@ from comic_translator.turns import turn_of
 USAGE = (
     "usage: run.py detect <image or archive> | run.py render <work folder> [page ...]"
     " | run.py pack <work folder> <archive> | run.py parts <work folder> <workers> <language>"
-    " <archive> | run.py names-programs <work folder> <language> | run.py names <work folder>"
-    " | run.py programs <work folder> <language> <page ...> | run.py apply <work folder>"
+    " <archive> | run.py names-jobs <work folder> <language> | run.py names <work folder>"
+    " | run.py jobs <work folder> <language> <page ...> | run.py apply <work folder>"
     " <page ...> | run.py --help"
 )
 HELP = """usage: uv run scripts/run.py COMMAND ARGUMENT
@@ -87,13 +87,13 @@ commands:
   parts <work folder> <workers> <language> <archive>
                                 the report that splits the pages with text into one part per
                                 worker, naming each part's pages, and the Combine line
-  names-programs <work folder> <language>
-                                a program for execute_typescript whose calls list the chapter's
-                                names from its box sheets
+  names-jobs <work folder> <language>
+                                a jobs file whose calls list the chapter's names from its box
+                                sheets
   names <work folder>           add the names those calls saved to names.json
-  programs <work folder> <language> <page ...>
-                                programs for execute_typescript, each page one call that saves
-                                its answer to drafts/<page>.json
+  jobs <work folder> <language> <page ...>
+                                a jobs file: each page one call, its images, instructions and
+                                save_to, whose answer is saved to drafts/<page>.json
   apply <work folder> <page ...>
                                 write each page's saved answer into its notes, and name the
                                 pages that need a closer look
@@ -465,12 +465,12 @@ def batch_command(argv: Sequence[str]) -> dict[str, object]:
     match list(argv):
         case ["parts", folder, workers, language, archive] if workers.isdigit():
             return {"summary": parts_summary(work_folder(folder), int(workers), language, archive)}
-        case ["names-programs", folder, language]:
-            return {"programs": names_programs(work_folder(folder), language)}
+        case ["names-jobs", folder, language]:
+            return names_jobs(work_folder(folder), language)
         case ["names", folder]:
             return {"names": merged_names(work_folder(folder))}
-        case ["programs", folder, language, *pages] if pages:
-            return {"programs": page_programs(work_folder(folder), language, pages)}
+        case ["jobs", folder, language, *pages] if pages:
+            return page_jobs(work_folder(folder), language, pages)
         case ["apply", folder, *pages] if pages:
             return dict(applied(work_folder(folder), pages))
         case _:

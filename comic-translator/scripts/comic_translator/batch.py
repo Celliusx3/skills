@@ -1,4 +1,4 @@
-"""A chapter's pages handed to the model one call per page: the parts, the programs that make
+"""A chapter's pages handed to the model one call per page: the parts, the jobs files that list
 the calls, the names list they share, and the notes their answers become."""
 
 from __future__ import annotations
@@ -10,9 +10,9 @@ from pathlib import Path
 
 from comic_translator.detect import DetectError, number_order
 
-PAGES_PER_PROGRAM = 15
 SHEETS_PER_NAMES_CALL = 10
 DRAFTS = "drafts"
+JOBS = "jobs"
 INSTRUCTIONS = Path(__file__).parent / "instructions"
 
 PAGE_INSTRUCTIONS = (INSTRUCTIONS / "page.txt").read_text().strip()
@@ -46,14 +46,13 @@ def parts_summary(work: Path, workers: int, language: str, archive: str) -> str:
     lines = [
         f"The chapter has {total} pages, {len(pages)} of them with text, so it is translated in "
         f"{len(runs)} parts.",
-        "Start now one ticket for each line below with ticket_route, the line as its whole task:",
+        "Start one worker task for each line below now, the line as its whole task:",
         *(
             f"- Part: translate pages {', '.join(run)} of the chapter in {work} into {language}, "
             "with the comic-translator skill."
             for run in runs
         ),
-        "Only after every one of those reports ready, start one ticket with ticket_route for "
-        "this task:",
+        "Only after every one of those reports ready, start one worker task for this line:",
         f"- Combine: pack the chapter in {work} with the comic-translator skill, and hand over "
         f"{archive}.",
     ]
@@ -77,34 +76,26 @@ def names_of(work: Path) -> dict[str, str]:
     return json.loads(path.read_text()) if path.is_file() else {}
 
 
-def calls_program(calls: Sequence[dict[str, object]]) -> str:
-    """A code-mode program that makes each ask_about_images call in turn and names any that fail."""
-    return "\n".join(
-        [
-            f"const calls = {json.dumps(list(calls), ensure_ascii=False)};",
-            "const failed = [];",
-            "for (const call of calls) {",
-            "  try {",
-            "    await ask_about_images(call);",
-            "  } catch (error) {",
-            "    failed.push(call.save_to);",
-            "  }",
-            "}",
-            "return { made: calls.length - failed.length, failed };",
-        ]
-    )
+def jobs_file(work: Path, name: str, jobs: Sequence[dict[str, object]]) -> dict[str, object]:
+    """`jobs` written to `work`/jobs/`name`.json, each a call's images, instructions and the file
+    its answer is saved to; where they are, and how many."""
+    folder = work / JOBS
+    folder.mkdir(exist_ok=True)
+    (work / DRAFTS).mkdir(exist_ok=True)
+    path = folder / f"{name}.json"
+    path.write_text(json.dumps(list(jobs), ensure_ascii=False, indent=1))
+    return {"jobs": str(path), "count": len(jobs)}
 
 
-def page_programs(work: Path, language: str, pages: Sequence[str]) -> list[str]:
-    """Programs of at most PAGES_PER_PROGRAM pages, each page one call that saves its draft."""
+def page_jobs(work: Path, language: str, pages: Sequence[str]) -> dict[str, object]:
+    """The jobs file for `pages`: each page one call that reads its box sheets and saves its
+    draft."""
     known = set(text_pages(work))
     unknown = [page for page in pages if page not in known]
     if unknown:
         raise DetectError(f"pages {', '.join(unknown)} have no text to translate")
-    drafts = work / DRAFTS
-    drafts.mkdir(exist_ok=True)
     names = json.dumps(names_of(work), ensure_ascii=False)
-    calls = [
+    jobs = [
         {
             "paths": page_sheets(work, page),
             "instructions": PAGE_INSTRUCTIONS.format(
@@ -112,28 +103,25 @@ def page_programs(work: Path, language: str, pages: Sequence[str]) -> list[str]:
                 ids=", ".join(map(str, page_ids(work, page))),
                 names=names,
             ),
-            "save_to": str(drafts / f"{page}.json"),
+            "save_to": str(work / DRAFTS / f"{page}.json"),
         }
         for page in pages
     ]
-    chunks = [calls[i : i + PAGES_PER_PROGRAM] for i in range(0, len(calls), PAGES_PER_PROGRAM)]
-    return [calls_program(chunk) for chunk in chunks]
+    return jobs_file(work, f"pages-{pages[0]}-{pages[-1]}", jobs)
 
 
-def names_programs(work: Path, language: str) -> list[str]:
-    """One program whose calls list the chapter's names from its box sheets, a few at a time."""
+def names_jobs(work: Path, language: str) -> dict[str, object]:
+    """The jobs file whose calls list the chapter's names from its box sheets, a few at a time."""
     sheets = [sheet for page in text_pages(work) for sheet in page_sheets(work, page)]
-    drafts = work / DRAFTS
-    drafts.mkdir(exist_ok=True)
-    calls = [
+    jobs = [
         {
             "paths": sheets[i : i + SHEETS_PER_NAMES_CALL],
             "instructions": NAMES_INSTRUCTIONS.format(language=language),
-            "save_to": str(drafts / f"names-{i // SHEETS_PER_NAMES_CALL + 1}.json"),
+            "save_to": str(work / DRAFTS / f"names-{i // SHEETS_PER_NAMES_CALL + 1}.json"),
         }
         for i in range(0, len(sheets), SHEETS_PER_NAMES_CALL)
     ]
-    return [calls_program(calls)]
+    return jobs_file(work, "names", jobs)
 
 
 def answer_of(path: Path) -> object:

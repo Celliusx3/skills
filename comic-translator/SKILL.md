@@ -9,9 +9,12 @@ compatibility: Requires running shell commands with uv, viewing image files, int
 ## Available scripts
 
 - **`scripts/run.py`**: `detect` finds the text on every page and writes a work
-  folder; `render` erases each entry's text and letters its translation; `pack`
-  puts the translated pages into one archive. `--help` shows all three. Each
-  prints one JSON object, or one line starting `error:` that says what to fix.
+  folder; `names-jobs`, `names` and `jobs` write the per-page model calls to
+  jobs files; `apply` turns the saved answers into notes; `render` erases each
+  entry's text and letters its translation; `pack` puts the translated pages
+  into one archive; `parts` splits a chapter for several workers. `--help`
+  shows them all. Each prints one JSON object, or one line starting `error:`
+  that says what to fix.
 
 Run each command below exactly as written, from this skill's folder. Do not
 modify it, read the scripts, or copy them: the folder may be read-only, and
@@ -23,107 +26,38 @@ install it, and only on their yes run
 `~/.local/bin/uv`, which is not on the search path, so in every command
 below write `~/.local/bin/uv` where it says `uv`.
 
+`<language>` is the one the person asked for, English when they don't say.
+
 ## Workflow
 
-A chapter with many pages can be split across several workers: see
-[Long chapters](#long-chapters) before you start one.
+Your task may give you a role: Prepare, Part or Combine. A task that names
+no role is the whole job.
 
 Progress:
 - [ ] 1. Detect
-- [ ] 2. Read and edit the notes, one page at a time
-- [ ] 3. Render and check
-- [ ] 4. Hand over
+- [ ] 2. Translate the pages
+- [ ] 3. Hand over
 
 1. **Detect**, giving the image or the `.zip`/`.cbz` as it is:
    ```bash
    cd "<this skill's folder>" && uv run scripts/run.py detect "<page image or archive>"
    ```
-   It makes a work folder beside the input holding, for each page:
-   - `notes/<page>.json`: the entries to edit, one per piece of text found;
-   - `overview/<page>.jpg`: the whole page small, every entry in a numbered
-     red box. Its text is too small to read;
-   - `boxes/<page>-<n>.jpg`: the page's sheets of boxes, starting at `-1`.
-     One sheet holds several entries, each box cut out with a little of what
-     is round it, enlarged and numbered with its entry's `id`. List the
-     `boxes` folder to see how many sheets a page has;
-   - `review/<page>-<n>.jpg`: the page in full-size stretches, with a ruler
-     along the top and left whose numbers are page pixels, as the boxes are.
+   It makes a work folder beside the input. Its report names the work folder
+   and, in `text_pages`, the pages with text: a page with none is done
+   already. Running it again keeps notes already in the work folder.
 
-   Running it again keeps notes already in the work folder.
-
-   Then count the pages in `<work folder>/pages`. When your task names no
-   role, the chapter has 2 pages or more, and your bot can run 2 workers or
-   more, you are Prepare: go to [Long chapters](#long-chapters) now, and do
-   not start step 2.
-2. **Read and edit**, one page at a time: the overview for where each box
-   sits, then the page's `boxes` sheets to read the text. The number on a box
-   is the entry with that `id` in the page's notes. Open a `review` stretch
-   only for a closer look round a box, or to find text no box holds. Finish a
-   page's notes before opening the next page's images. In each entry:
-   - `original`: the text in the box exactly as it reads on the `boxes`
-     sheet. Never write it from the overview: its text is too small to read,
-     and what you write from it is a guess;
-   - `translation`: it in the language the person asked for (English when
-     they don't say), punctuated as that language does;
-   - keep the entry only for text inside a speech bubble, a thought bubble or
-     a caption box, sounds in a bubble too, with `translation` the same as
-     `original` when it already reads right, so it is lettered like the rest
-     of the page;
-   - delete every other entry, to leave its text as it is: text drawn as part
-     of the picture is never translated. That is a banner (`BIENVENIDOS`), a
-     shop or street sign (`FLORISTA`, `PANADERÍA`), a label on a box or a
-     building (`TORNILLOS`), a note, bill or coin (`1 DÓLAR`), writing carved
-     or painted on a thing, a title or logo, a poster, a chart's labels, a
-     sound effect drawn on the art, outlined or not, credits, a watermark, or
-     a box with no text. When in doubt, ask whether the text sits in a bubble
-     or a caption box: if not, delete it. A kept entry, even with the same
-     text, is erased and lettered again in plain type, and erasing drawn text
-     damages the picture round it;
-   - text no box holds: add an entry with a new `id`;
-   - text written in columns, or a right-to-left target language: add
-     `"direction": "vertical"` or `"rtl"`.
-
-   An entry before and after editing; only `original` and `translation`
-   change, and `box` stays as detect wrote it:
-   ```json
-   {"id": 2, "box": {"left": 330, "top": 50, "right": 470, "bottom": 120}, "original": "", "translation": ""}
-   {"id": 2, "box": {"left": 330, "top": 50, "right": 470, "bottom": 120}, "original": "...y el toque final.", "translation": "...and the final touch."}
-   ```
-3. **Render and check**, looping until every page is clean:
+   When you have no role, the chapter has 2 pages or more, and you can start
+   2 workers or more, you are Prepare: go to [Several workers](#several-workers)
+   now.
+2. **Translate the pages**, all of `text_pages`, as
+   [Translating pages](#translating-pages) says. First build the names list:
    ```bash
-   cd "<this skill's folder>" && uv run scripts/run.py render "<work folder>"
+   uv run scripts/run.py names-jobs "<work folder>" <language>
    ```
-   Name pages after the work folder to render only those, such as
-   `render "<work folder>" 005 006 007`.
-   1. When render refuses, fix what it names and render again:
-      - an entry with no translation: translate it, or delete it to leave
-        its text as it is;
-      - a symbol the font cannot draw, such as `♪` or an emoji: write it in
-        words or leave it out. The box still covers the symbol in the
-        original, so it is erased.
-   2. Each page's `warnings` come first:
-      - a box far from where detect found its text, with the box detect
-        found: put the box back on its text;
-      - a box holding more lines than its `translation` reads: read the whole
-        box again;
-      - a page whose every translation is its original: translate it into
-        the language asked for.
-   3. Each page's `left as it is` lists the ids of text detect found whose
-      entry was deleted. Find each by its box in `detected/<page>.json` on
-      the ruled `review` images. One in a speech bubble or a caption, however
-      short (`¡FUERON TIEMPOS LOCOS!`, `EE, ESTÁ BIEN.`), was deleted by
-      mistake: copy its entry back into the notes and translate it.
-   4. Look at the `result-boxes/<page>-<n>.jpg` sheets, each box cut from the
-      translated page (a `result` stretch for a closer look). Where text is
-      left over, a box reached onto the art, or a translation reads badly,
-      edit the notes.
-   5. Render the pages you changed, naming them, such as
-      `render "<work folder>" 005 012`, and go back to 1. Stop when no page
-      changed. A piece of text still not clean after you changed its entry
-      twice: delete its entry, and say so in your answer. Render refuses a
-      page it has drawn 3 times: leave that page as it is. Do not ask to
-      render it again: report `ready`, naming what is still not clean on it.
-4. **Hand over**, in two steps:
+   Answer its jobs file as [Answering a jobs file](#answering-a-jobs-file)
+   says, then run `uv run scripts/run.py names "<work folder>"`. It writes
+   `names.json`, which every page's job reads.
+3. **Hand over**, in two steps:
    - pack the translated pages next to the input, named as it with the
      target language's English name before its extension, as `chapter.zip`
      translated to English becomes `chapter-english.zip`:
@@ -132,53 +66,103 @@ Progress:
      ```
      A page with no entries goes in as it is. It refuses while a page is
      untranslated, or its notes changed after it was rendered, and names
-     those pages. Working alone, render and check
-     them as in step 3, then pack again; a Combine reports blocked instead.
+     those pages. Working alone, translate and render them, then pack again;
+     a Combine reports blocked instead.
    - send that zip to the person with your tool for giving them a file, then
      write your answer.
 
-## Long chapters
+## Translating pages
 
-Your task says which of these you are. A task that names no role and gives
-a chapter is the first one.
-
-**Prepare.** Run step 1, Detect. Your task says how many workers your bot
-can run at once; when it does not, take 3. With one page, or a bot that runs
-one worker, carry on alone with steps 2 to 4: there is nothing to share.
-Otherwise, with `<language>` the one the person asked for (English when they
-don't say), run each command below from this skill's folder, in order:
-1. `uv run scripts/run.py names-programs "<work folder>" <language>`. Pass
-   each program in its `programs` to `execute_typescript` exactly as printed,
-   one after another. Each asks `ask_about_images` for the chapter's names.
-2. `uv run scripts/run.py names "<work folder>"`. It writes those names to
-   `names.json`, which every part reads.
-3. `uv run scripts/run.py parts "<work folder>" <workers> <language> "<input's folder>/<input's name>-<language>.zip"`.
-   Call `ticket_report` with the state `ready` and its `summary` as the
-   summary, exactly as printed.
-
-Stop there. Those lines are for your bot, which starts each one as its own
-ticket, so the person sees every part. Do not read a page yourself.
-
-**Part.** Your task names your pages one by one and the language. Do only
-these pages, from this skill's folder:
-1. `uv run scripts/run.py programs "<work folder>" <language> <your pages>`.
-   Pass each program in its `programs` to `execute_typescript` exactly as
-   printed, one after another. Each program translates its pages, one
-   `ask_about_images` call per page, and saves each answer.
+For the pages you were given, from this skill's folder:
+1. `uv run scripts/run.py jobs "<work folder>" <language> <your pages>`. Answer
+   the jobs file it names, as [Answering a jobs file](#answering-a-jobs-file)
+   says. Each page's answer gives every box a kind, its original and its
+   translation.
 2. `uv run scripts/run.py apply "<work folder>" <your pages>`. It writes the
-   answers into the notes and lists in `flagged` the pages to look at again.
-3. `render "<work folder>" <your pages>`, as in step 3.
-4. Look again only at the pages in `flagged`, and at pages whose `warnings`
-   or `left as it is` render reports. For each, open its `boxes` sheets and
-   its `result-boxes` sheets, fix its notes as step 2 says, and render it
-   again. Every other page is done.
+   answers into the notes: it keeps text in bubbles and captions, and leaves
+   signs, titles and sounds drawn on the art as they are. Its `flagged` lists
+   the pages to look at again, and why.
+3. Render your pages, naming them after the work folder:
+   ```bash
+   cd "<this skill's folder>" && uv run scripts/run.py render "<work folder>" <your pages>
+   ```
+   When render refuses, fix what it names and render again:
+   - an entry with no translation: translate it, or delete it to leave its
+     text as it is;
+   - a symbol the font cannot draw, such as `♪` or an emoji: write it in
+     words or leave it out. The box still covers the symbol in the
+     original, so it is erased.
+4. Look again only at the pages in `flagged`, and at pages whose render
+   report has `warnings` or `left as it is`. Every other page is done. For
+   each, fix its notes as [Fixing a page](#fixing-a-page) says and render it
+   again, naming it. Stop when no page changed. A piece of text still not
+   clean after you changed its entry twice: delete its entry, and say so in
+   your answer. Render refuses a page it has drawn 3 times: leave that page
+   as it is, and name what is still not clean on it.
 
-When your pages are rendered, report `ready` with how many pages you
-translated, and the pages you looked at again and why.
+## Answering a jobs file
 
-**Combine.** Do step 4, Hand over, only. Do not read, translate or render a
-page. When pack refuses, report `blocked` with the pages it names and why,
-and which part's task names them, so your bot sends them back to that part.
+A jobs file is a JSON list. Each job has image `paths`, `instructions`, and
+`save_to`. Get every job answered by a model that can see images, sending it
+only that job's instructions and images, and save its reply, as it is, to
+the job's `save_to`. When one of your tools takes a whole jobs file, give it
+the file: it answers each job with no history, which is fastest and
+cheapest. Otherwise answer the jobs one at a time. Then name any job whose
+answer was not saved, run it again once, and go on: `apply` flags a page
+with no answer.
+
+## Fixing a page
+
+Detect wrote, for each page, `boxes/<page>-<n>.jpg`: sheets of boxes, each
+box cut out with a little of what is round it, enlarged and numbered with
+its entry's `id` in `notes/<page>.json`. Render wrote `result-boxes` sheets
+of the same boxes on the translated page. `overview/<page>.jpg` shows where
+each box sits; its text is too small to read. A `review` or `result`
+stretch is the page full size, with a ruler whose numbers are page pixels.
+
+Open the page's `boxes` and `result-boxes` sheets and edit its notes:
+- `original`: the text in the box exactly as it reads on the `boxes` sheet;
+- `translation`: it in `<language>`, punctuated as that language does;
+- keep an entry only for text in a speech bubble, a thought bubble or a
+  caption box, sounds in a bubble too. Delete every other entry, to leave
+  its text as it is: a sign, a label, a title or logo, a sound effect drawn
+  on the art, credits, or a box with no text. Erasing drawn text damages
+  the picture round it;
+- text no box holds: add an entry with a new `id`;
+- text written in columns, or a right-to-left target language: add
+  `"direction": "vertical"` or `"rtl"`.
+
+The render report's `warnings`: a box far from where detect found its text
+goes back on its text; a box holding more lines than its `translation` reads
+is read again whole. Its `left as it is` names ids of text detect found whose
+entry is gone: find each by its box in `detected/<page>.json`, and copy it
+back when it sits in a bubble or a caption.
+
+An entry before and after editing; only `original` and `translation`
+change, and `box` stays as detect wrote it:
+```json
+{"id": 2, "box": {"left": 330, "top": 50, "right": 470, "bottom": 120}, "original": "", "translation": ""}
+{"id": 2, "box": {"left": 330, "top": 50, "right": 470, "bottom": 120}, "original": "...y el toque final.", "translation": "...and the final touch."}
+```
+
+## Several workers
+
+**Prepare.** You have run Detect. Your task says how many workers can run at
+once; when it does not, take 3. From this skill's folder:
+1. Build the names list as step 2 of the workflow says: `names-jobs`, answer
+   its jobs file, then `names`.
+2. `uv run scripts/run.py parts "<work folder>" <workers> <language> "<input's folder>/<input's name>-<language>.zip"`.
+   Report its `summary` as your result, exactly as printed, and stop. Those
+   lines are for whoever started you: each becomes its own worker. Do not
+   translate a page yourself.
+
+**Part.** Your task names your pages and the language. Translate those pages
+and no others, as [Translating pages](#translating-pages) says. Then report
+how many pages you translated, and the pages you looked at again and why.
+
+**Combine.** Do step 3, Hand over, only. Do not read, translate or render a
+page. When pack refuses, report blocked with the pages it names and why,
+and which Part's task names them, so they go back to that Part.
 
 ## Gotchas
 
@@ -193,10 +177,10 @@ and which part's task names them, so your bot sends them back to that part.
 - A translation keeps the original's case: words in capitals stay in
   capitals (`¡NO! Ni se te ocurra.` is `NO! Don't even think about it.`).
 - A sound inside a bubble is translated (`¡COF, COF!` is `COUGH, COUGH!`);
-  one drawn on the art (`SHH SHH`, `PLOP`) is deleted, as in step 2.
-- Read the text yourself from the `boxes` sheets. Do not install OCR or other
-  packages to read it: they are large downloads, and the sheets are enlarged
-  for reading.
+  one drawn on the art (`SHH SHH`, `PLOP`) is left as it is.
+- Text is read from the `boxes` sheets, by the jobs or by you. Do not install
+  OCR or other packages to read it: they are large downloads, and the sheets
+  are enlarged for reading.
 - Look only at the images detect and render made: `overview`, `boxes`,
   `review`, `result-boxes` and `result`. Do not crop, zoom or save images of
   your own. Every image you open stays in your conversation, so each extra

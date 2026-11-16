@@ -47,6 +47,17 @@ def test_an_archive_is_unpacked_in_name_order_and_only_its_images(tmp_path: Path
     assert [page.name for page in pages] == ["001.jpg", "002.png"]
 
 
+def test_the_hidden_copies_a_mac_adds_to_an_archive_are_not_pages(tmp_path: Path) -> None:
+    archive = tmp_path / "chapter.zip"
+    with zipfile.ZipFile(archive, "w") as packed:
+        for name in ("page-1.jpg", "__MACOSX/._page-1.jpg", "page-2.jpg", "._page-2.jpg"):
+            packed.writestr(name, b"x")
+
+    pages = unpacked(archive, tmp_path / "pages")
+
+    assert [page.name for page in pages] == ["page-1.jpg", "page-2.jpg"]
+
+
 def test_pages_numbered_without_leading_zeros_are_unpacked_in_number_order(
     tmp_path: Path,
 ) -> None:

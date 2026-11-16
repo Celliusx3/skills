@@ -49,6 +49,17 @@ def number_order(name: str) -> list[str | int]:
     return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", name)]
 
 
+def is_page(name: str) -> bool:
+    """Whether the archive entry `name` is an image, and not a hidden copy a Mac adds, as
+    `__MACOSX/._001.jpg` is."""
+    path = Path(name)
+    return (
+        path.suffix.lower() in IMAGES
+        and "__MACOSX" not in path.parts
+        and not path.name.startswith("._")
+    )
+
+
 def unpacked(source: Path, pages: Path) -> list[Path]:
     """The pages of `source`, an image or an archive of images, copied into `pages` in order."""
     pages.mkdir(parents=True, exist_ok=True)
@@ -59,7 +70,7 @@ def unpacked(source: Path, pages: Path) -> list[Path]:
         raise DetectError(f"{source.name} is not an image or an archive of images ({kinds})")
     copied = []
     with zipfile.ZipFile(source) as archive:
-        images = (n for n in archive.namelist() if Path(n).suffix.lower() in IMAGES)
+        images = (n for n in archive.namelist() if is_page(n))
         names = sorted(images, key=number_order)
         for name in names:
             target = pages / Path(name).name

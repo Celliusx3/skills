@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import sys
 import zipfile
@@ -21,16 +22,20 @@ from typing import TextIO
 import numpy as np
 from PIL import Image
 
+from comic_translator.answers import applied
+from comic_translator.batch import merged_names, names_jobs, page_jobs, parts_summary
+from comic_translator.bubbles import by_paragraph
 from comic_translator.clean import erased
 from comic_translator.detect import (
     DetectError,
     held_lines,
     letters_held,
     line_boxes,
+    number_order,
     page_blocks,
     unpacked,
 )
-from comic_translator.letter import lettered
+from comic_translator.letter import filling_size, lettered
 from comic_translator.models import (
     INPAINTER,
     TEXT_FINDER,
@@ -45,17 +50,23 @@ from comic_translator.notes import (
     NotesError,
     moved,
     read_notes,
+    text_pages,
     undrawable,
     untranslated_pages,
     write_notes,
 )
 from comic_translator.review import overview, review_images
 from comic_translator.sheets import box_sheets
+from comic_translator.strip import LAYOUT, cut_back, laid_out
+from comic_translator.tries import count_render, refuse_spent, renders_so_far, spent
 from comic_translator.turns import turn_of
 
 USAGE = (
     "usage: run.py detect <image or archive> | run.py render <work folder> [page ...]"
-    " | run.py pack <work folder> <archive> | run.py --help"
+    " | run.py pack <work folder> <archive> | run.py parts <work folder> <workers> <language>"
+    " <archive> | run.py names-jobs <work folder> <language> | run.py names <work folder>"
+    " | run.py jobs <work folder> <language> <page ...> | run.py apply <work folder>"
+    " <page ...> | run.py --help"
 )
 HELP = """usage: uv run scripts/run.py COMMAND ARGUMENT
 
@@ -73,6 +84,19 @@ commands:
   pack <work folder> <archive>  put every translated page, in page order, into a new .zip or
                                 .cbz; refused while a page is untranslated, or its notes
                                 changed after it was rendered
+  parts <work folder> <workers> <language> <archive>
+                                the report that splits the pages with text into one part per
+                                worker, naming each part's pages, and the Combine line
+  names-jobs <work folder> <language>
+                                a jobs file whose calls list the chapter's names from its box
+                                sheets
+  names <work folder>           add the names those calls saved to names.json
+  jobs <work folder> <language> <page ...>
+                                a jobs file: each page one call, its images, instructions and
+                                save_to, whose answer is saved to drafts/<page>.json
+  apply <work folder> <page ...>
+                                write each page's saved answer into its notes, and name the
+                                pages that need a closer look
 
 Each prints one JSON object, or one line starting "error:" saying what to fix.
 
@@ -104,6 +128,7 @@ UNCHANGED = (
 )
 UNDRAWN = "page {found}, which the lettering font cannot draw: write it in words or leave it out"
 JPEG_QUALITY = 90
+SIZE_BAND = 1.15
 FEW_LETTERS = 0.5
 
 
@@ -116,6 +141,7 @@ def detected_page(session: Session, path: Path, work: Path) -> dict[str, object]
     its notes; drawn on its images as the notes have them."""
     page = page_image(path)
     blocks, likely = page_blocks(session, page)
+    blocks = by_paragraph(blocks)
     found = [Entry(n, box, "", "") for n, box in enumerate(blocks, start=1)]
     (work / "maps").mkdir(parents=True, exist_ok=True)
     likely.save(work / "maps" / f"{path.stem}.png", optimize=True)
@@ -138,9 +164,10 @@ def detected_page(session: Session, path: Path, work: Path) -> dict[str, object]
 def detect(source: Path, session: Session) -> dict[str, object]:
     """Every page of `source` unpacked into its work folder, with its notes and images to read."""
     work = work_of(source)
-    pages = unpacked(source, work / "pages")
+    pages = laid_out(work, unpacked(source, work / "source"))
     found = [detected_page(session, p, work) for p in pages]
-    return {"work": str(work), "files": DETECT_FILES, "pages": found}
+    with_text = [page["page"] for page in found if page["entries"]]
+    return {"work": str(work), "files": DETECT_FILES, "pages": found, "text_pages": with_text}
 
 
 def page_image(path: Path) -> Image.Image:
@@ -170,12 +197,36 @@ def translated(
     for entry in entries:
         patch = erased(done, entry.box, inpainter, likely)
         done.paste(patch.image, patch.at)
-    for entry in entries:
-        if entry.translation.strip():
-            others = [other.box for other in entries if other is not entry]
-            patch = lettered(done, page, entry.box, entry.translation, others, entry.original)
-            done.paste(patch.image, patch.at)
+    wording = [entry for entry in entries if entry.translation.strip()]
+    sizes = [
+        filling_size(done, page, e.box, e.translation, others_of(e, entries), e.original)
+        for e in wording
+    ]
+    for entry, size in zip(wording, page_sizes(sizes), strict=True):
+        patch = lettered(
+            done,
+            page,
+            entry.box,
+            entry.translation,
+            others_of(entry, entries),
+            entry.original,
+            size,
+        )
+        done.paste(patch.image, patch.at)
     return done
+
+
+def others_of(entry: Entry, entries: list[Entry]) -> list[Box]:
+    return [other.box for other in entries if other is not entry]
+
+
+def page_sizes(sizes: Sequence[int]) -> list[int]:
+    """Each entry's size, no more than SIZE_BAND of the page's middle size, so that one page's
+    lettering stays one size where the bubbles allow it."""
+    if not sizes:
+        return []
+    most = round(SIZE_BAND * float(np.median(sizes)))
+    return [min(size, most) for size in sizes]
 
 
 def cleared(folder: Path, stem: str) -> Path:
@@ -285,7 +336,7 @@ def chosen(pages: Sequence[Path], names: Sequence[str]) -> list[Path]:
         raise DetectError(
             f"the work folder has no page {', '.join(unknown)}; its pages are {', '.join(held)}"
         )
-    return [held[name] for name in sorted(set(names))]
+    return [held[name] for name in sorted(set(names), key=number_order)]
 
 
 def ready(notes: dict[str, list[Entry]]) -> None:
@@ -299,7 +350,9 @@ def ready(notes: dict[str, list[Entry]]) -> None:
 
 
 def pages_of(work: Path) -> list[Path]:
-    pages = sorted(p for p in (work / "pages").iterdir() if p.is_file())
+    pages = sorted(
+        (p for p in (work / "pages").iterdir() if p.is_file()), key=lambda p: number_order(p.name)
+    )
     if not pages:
         raise DetectError(f"{work} holds no pages; run detect first")
     return pages
@@ -315,10 +368,18 @@ def render(work: Path, names: Sequence[str]) -> dict[str, object]:
     """The named pages of the work folder, or every page, translated from their notes."""
     redo = chosen(pages_of(work), names)
     ready(notes_of(work, redo))
+    refuse_spent(work, [p.stem for p in redo])
     inpainter = Inpainter()
     with turn_of(work, [p.stem for p in redo]):
-        done = [rendered_page(p, work, inpainter) for p in redo]
+        done = [counted_render(p, work, inpainter) for p in redo]
     return {"work": str(work), "files": RENDER_FILES, "pages": done}
+
+
+def counted_render(path: Path, work: Path, inpainter: Inpainter) -> dict[str, object]:
+    """`path` rendered, with one more render noted against it."""
+    done = rendered_page(path, work, inpainter)
+    count_render(work, path.stem)
+    return done
 
 
 def unrendered(work: Path, pages: Sequence[Path]) -> list[str]:
@@ -333,19 +394,41 @@ def unrendered(work: Path, pages: Sequence[Path]) -> list[str]:
 
 
 def pack(work: Path, archive: Path) -> dict[str, object]:
-    """Every translated page, in page order, in a new archive; refused while any page is
-    untranslated or not rendered since its notes changed."""
+    """Every page, in page order, in a new archive: translated where it has entries, as it is
+    where it has none; refused while any page is untranslated or not rendered since its notes
+    changed, except a page rendered as many times as it may be, which keeps its last render."""
     if archive.suffix.lower() not in (".zip", ".cbz"):
         raise DetectError(f"{archive} must end in .zip or .cbz")
     pages = pages_of(work)
-    ready(notes_of(work, pages))
-    stale = unrendered(work, pages)
+    notes = notes_of(work, pages)
+    ready(notes)
+    lettered_pages = set(text_pages(notes))
+    final = set(spent(renders_so_far(work, sorted(lettered_pages))))
+    stale = unrendered(work, [p for p in pages if p.stem in lettered_pages - final])
     if stale:
         raise DetectError(UNRENDERED.format(pages=", ".join(stale)))
+    chosen = [work / "translated" / p.name if p.stem in lettered_pages else p for p in pages]
+    if (work / LAYOUT).is_file():
+        return packed_strips(work, chosen, archive)
     with zipfile.ZipFile(archive, "w") as packed:
         for p in pages:
-            packed.write(work / "translated" / p.name, p.name)
+            source = work / "translated" / p.name if p.stem in lettered_pages else p
+            packed.write(source, p.name)
     return {"archive": str(archive), "pages": len(pages)}
+
+
+def packed_strips(work: Path, chosen: Sequence[Path], archive: Path) -> dict[str, object]:
+    """The chapter cut back into its original strips, by their names, in a new archive."""
+    strips = cut_back(work, chosen)
+    with zipfile.ZipFile(archive, "w") as packed:
+        for name, image in strips:
+            encoded = io.BytesIO()
+            kind = "JPEG" if Path(name).suffix.lower() in (".jpg", ".jpeg") else "PNG"
+            image.save(
+                encoded, format=kind, **({"quality": JPEG_QUALITY} if kind == "JPEG" else {})
+            )
+            packed.writestr(name, encoded.getvalue())
+    return {"archive": str(archive), "pages": len(strips)}
 
 
 def command(argv: Sequence[str]) -> dict[str, object]:
@@ -365,6 +448,31 @@ def command(argv: Sequence[str]) -> dict[str, object]:
             if not (work / "pages").is_dir():
                 raise DetectError(f"{folder} is not a work folder from detect")
             return pack(work, Path(archive).expanduser().resolve())
+        case _:
+            return batch_command(argv)
+
+
+def work_folder(folder: str) -> Path:
+    """`folder` as a work folder detect made; refused when it is not one."""
+    work = Path(folder).expanduser().resolve()
+    if not (work / "pages").is_dir():
+        raise DetectError(f"{folder} is not a work folder from detect")
+    return work
+
+
+def batch_command(argv: Sequence[str]) -> dict[str, object]:
+    """The commands that hand a chapter's pages to the model one call per page."""
+    match list(argv):
+        case ["parts", folder, workers, language, archive] if workers.isdigit():
+            return {"summary": parts_summary(work_folder(folder), int(workers), language, archive)}
+        case ["names-jobs", folder, language]:
+            return names_jobs(work_folder(folder), language)
+        case ["names", folder]:
+            return {"names": merged_names(work_folder(folder))}
+        case ["jobs", folder, language, *pages] if pages:
+            return page_jobs(work_folder(folder), language, pages)
+        case ["apply", folder, *pages] if pages:
+            return dict(applied(work_folder(folder), pages))
         case _:
             raise DetectError(USAGE)
 

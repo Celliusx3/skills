@@ -1,0 +1,4 @@
+These images are box sheets from one comic chapter. Each numbered box shows a piece of its text.
+List every person's name, place, title and recurring term in the speech bubbles and captions, with how to write it in {language}.
+Leave out ordinary words. Write each translation as it should appear in the comic's text, with no explanation, note or brackets.
+Answer with JSON only: {{"names": {{"<as it is written>": "<in {language}>"}}}}

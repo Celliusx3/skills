@@ -336,6 +336,83 @@ def test_pack_writes_the_translated_pages_in_order(detected: dict, tmp_path: Pat
     assert zipfile.ZipFile(archive).namelist() == ["001.png", "002.png"]
 
 
+def test_pack_takes_a_page_with_no_entries_as_it_is_without_a_render(
+    detected: dict, tmp_path: Path
+) -> None:
+    work = second_page(detected)
+    (work / "notes" / "002.json").write_text("[]")
+    translate_every_entry(detected["work"])
+    assert called(["render", detected["work"], "001"])[0] == 0
+    archive = tmp_path / "c.zip"
+
+    code, result = called(["pack", detected["work"], str(archive)])
+
+    assert code == 0
+    assert result == {"archive": str(archive), "pages": 2}
+    assert zipfile.ZipFile(archive).read("002.png") == (work / "pages" / "002.png").read_bytes()
+
+
+def test_detect_names_the_pages_that_hold_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(run, "session_of", fake_session)
+    folder = tmp_path / "chapter"
+    folder.mkdir()
+    page_with_lines(folder / "01.png", [(40, 50, 300, 62)])
+    page_with_lines(folder / "02.png", [])
+    archive = tmp_path / "chapter.zip"
+    with zipfile.ZipFile(archive, "w") as packed:
+        for page in sorted(folder.iterdir()):
+            packed.write(page, page.name)
+
+    code, result = called(["detect", str(archive)])
+
+    assert code == 0
+    assert result["text_pages"] == ["01"]
+
+
+def test_pack_refuses_a_page_whose_notes_are_missing_naming_it(
+    detected: dict, tmp_path: Path
+) -> None:
+    work = rendered_chapter(detected)
+    (work / "notes" / "002.json").unlink()
+
+    code, text = called(["pack", detected["work"], str(tmp_path / "c.zip")])
+
+    assert code == 1
+    assert text.startswith("error: 002.json is missing")
+    assert not (tmp_path / "c.zip").exists()
+
+
+def test_render_refuses_a_page_rendered_three_times_already(detected: dict) -> None:
+    translate_every_entry(detected["work"])
+    for _ in range(3):
+        assert called(["render", detected["work"], "001"])[0] == 0
+
+    code, text = called(["render", detected["work"], "001"])
+
+    assert code == 1
+    assert text.startswith("error: pages 001 were rendered 3 times already")
+
+
+def test_pack_takes_the_last_render_of_a_page_rendered_three_times(
+    detected: dict, tmp_path: Path
+) -> None:
+    work = rendered_chapter(detected)
+    for _ in range(2):
+        assert called(["render", detected["work"], "001"])[0] == 0
+    time.sleep(0.01)
+    (work / "notes" / "001.json").write_text((work / "notes" / "001.json").read_text())
+    archive = tmp_path / "c.zip"
+
+    code, result = called(["pack", detected["work"], str(archive)])
+
+    assert code == 0
+    assert (
+        zipfile.ZipFile(archive).read("001.png") == (work / "translated" / "001.png").read_bytes()
+    )
+
+
 def test_pack_refuses_a_chapter_with_an_untranslated_entry(detected: dict, tmp_path: Path) -> None:
     rendered_chapter(detected)
     entries = json.loads(notes_of(detected).read_text())

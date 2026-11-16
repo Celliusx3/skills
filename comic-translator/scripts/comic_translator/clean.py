@@ -32,6 +32,8 @@ SMALL_PIECE = 0.1
 REACH = 0.15
 PAST_BOX = 0.1
 THIN = 2
+OPENING_MARKS = "¡¿"
+OPENING_REACH = 0.4
 AWAY = 12
 MARGIN = 2.0
 SEEN_GROW = 2
@@ -49,6 +51,15 @@ class Patch:
 
     image: Image.Image
     at: tuple[int, int]
+
+
+def with_opening_mark(box: Box, original: str) -> Box:
+    """`box` reaching OPENING_REACH of its height further left when its text opens with `¡` or
+    `¿`, a mark too thin for the text finder that its box so often stops short of."""
+    if original.lstrip()[:1] not in OPENING_MARKS:
+        return box
+    reach = round(OPENING_REACH * (box.bottom - box.top))
+    return Box(max(0, box.left - reach), box.top, box.right, box.bottom)
 
 
 def frame_of(box: Box, size: tuple[int, int], grow: int) -> Box:

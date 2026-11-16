@@ -25,7 +25,7 @@ from PIL import Image
 from comic_translator.answers import applied
 from comic_translator.batch import merged_names, names_jobs, page_jobs, parts_summary
 from comic_translator.bubbles import by_paragraph
-from comic_translator.clean import erased
+from comic_translator.clean import erased, with_opening_mark
 from comic_translator.detect import (
     DetectError,
     held_lines,
@@ -195,7 +195,7 @@ def translated(
     copied per entry."""
     done = page.copy()
     for entry in entries:
-        patch = erased(done, entry.box, inpainter, likely)
+        patch = erased(done, with_opening_mark(entry.box, entry.original), inpainter, likely)
         done.paste(patch.image, patch.at)
     wording = [entry for entry in entries if entry.translation.strip()]
     sizes = [

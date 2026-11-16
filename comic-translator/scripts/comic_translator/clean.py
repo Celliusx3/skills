@@ -31,6 +31,7 @@ GHOST_REACH = 2
 SMALL_PIECE = 0.1
 REACH = 0.15
 PAST_BOX = 0.1
+THIN = 2
 AWAY = 12
 MARGIN = 2.0
 SEEN_GROW = 2
@@ -185,7 +186,25 @@ def text_in(
     letters = np.isin(labels, np.union1d(np.setdiff1d(small, running_off), words))
     letters |= inked_letters(far & ink_of(pixels, paper_colours(pixels, box_mask, near)), edge)
     running = np.isin(labels, np.setdiff1d(running_off, [0])) & ~letters
+    cores = marks_on_lines(running, letters, box_mask)
+    letters |= cores
+    running &= ~cores
     return letters, far & box_mask & ~letters & ~running, running
+
+
+def marks_on_lines(running: Mask, letters: Mask, box_mask: Mask) -> Mask:
+    """The thick small marks inside the box that only a thin line joins to what runs past the
+    margin, as a `¡` whose stem touches the bubble's outline is, with their own rim: what is
+    left of it and the letters once lines up to THIN wide are peeled off, no larger than
+    SMALL_PIECE of the box, at least half in it and mostly not letters, so a caption's tint cut
+    up by its letters stays whole."""
+    cores, sizes = pieces(ndimage.binary_opening(running | letters, iterations=THIN))
+    in_box = np.bincount(cores[box_mask], minlength=sizes.size + 1)[1:]
+    of_running = np.bincount(cores[running], minlength=sizes.size + 1)[1:]
+    small = sizes <= SMALL_PIECE * box_mask.sum()
+    marks = np.flatnonzero(small & (in_box >= sizes / 2) & (of_running >= sizes / 2)) + 1
+    found = np.isin(cores, marks)
+    return running & ndimage.binary_dilation(found, iterations=THIN + 1)
 
 
 def poking_out(labels: NDArray[np.int32], box_mask: Mask) -> NDArray[np.int32]:
